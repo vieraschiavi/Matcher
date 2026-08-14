@@ -45,3 +45,7 @@ GoogleService-Info.plist
 # Sistema
 .DS_Store
 Thumbs.db
+
+# El kit de marca se genera: `python3 -m marketing.generar_kit`. Se versiona el
+# generador, no las 36 imágenes de salida.
+marketing/kit/
