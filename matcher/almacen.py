@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import uuid
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta
@@ -171,17 +172,69 @@ class SinCupo(Exception):
 
 
 class Almacen:
+    """Acceso a la base.
+
+    Dos cosas que parecen detalle y no lo son, las dos aprendidas de 500 en
+    producción:
+
+    1. **Una conexión por hilo.** FastAPI atiende los endpoints sincrónicos en
+       un pool de hilos. Con una sola conexión compartida (`check_same_thread=
+       False`) las transacciones de dos hilos se entreveran: uno abre y el otro
+       cierra, y salta "cannot commit - no transaction is active".
+    2. **`isolation_level="IMMEDIATE"`.** Con el default, la transacción arranca
+       como lectora y pide subir a escritora en el primer UPDATE. Esa subida NO
+       respeta `busy_timeout`: falla al toque con "database is locked". Pidiendo
+       el lock de escritura de entrada, el que llega segundo hace la cola.
+
+    En `:memory:` la conexión es única a propósito: cada conexión a memoria es
+    una base distinta, así que una por hilo daría bases vacías.
+    """
+
     def __init__(self, ruta: str | Path = ":memory:"):
         self.ruta = str(ruta)
-        if self.ruta != ":memory:":
+        self.en_memoria = self.ruta == ":memory:"
+        if not self.en_memoria:
             Path(self.ruta).parent.mkdir(parents=True, exist_ok=True)
-        self.con = sqlite3.connect(self.ruta, check_same_thread=False)
-        self.con.row_factory = sqlite3.Row
-        self.con.executescript(ESQUEMA)
-        self.con.commit()
+        self._local = threading.local()
+        self._compartida = self._nueva_conexion() if self.en_memoria else None
+        con = self.con
+        con.executescript(ESQUEMA)
+        con.commit()
+
+    def _nueva_conexion(self) -> sqlite3.Connection:
+        con = sqlite3.connect(
+            self.ruta, check_same_thread=False, timeout=15, isolation_level="IMMEDIATE"
+        )
+        con.row_factory = sqlite3.Row
+        if not self.en_memoria:
+            # En serverless varias invocaciones corren en procesos distintos de
+            # la MISMA instancia, todos sobre el mismo archivo en /tmp. WAL deja
+            # leer mientras alguien escribe; sin él, un lector y un escritor a
+            # la vez se pisan.
+            con.execute("PRAGMA journal_mode=WAL")
+            con.execute("PRAGMA synchronous=NORMAL")
+        con.execute("PRAGMA busy_timeout=15000")
+        return con
+
+    @property
+    def con(self) -> sqlite3.Connection:
+        if self._compartida is not None:
+            return self._compartida
+        con = getattr(self._local, "con", None)
+        if con is None:
+            con = self._nueva_conexion()
+            self._local.con = con
+        return con
 
     def cerrar(self) -> None:
-        self.con.close()
+        if self._compartida is not None:
+            self._compartida.close()
+            self._compartida = None
+            return
+        con = getattr(self._local, "con", None)
+        if con is not None:
+            con.close()
+            self._local.con = None
 
     # ------------------------------------------------------------------
     # Serialización de perfiles
@@ -461,14 +514,24 @@ class Almacen:
         self.con.commit()
 
     def tocar(self, id_: str) -> None:
-        """Marca actividad reciente. Alimenta `scoring.actividad`."""
+        """Marca actividad reciente. Alimenta `scoring.actividad`.
+
+        Es la escritura más frecuente de todas —una por pedido autenticado— y
+        la menos importante: si no se puede anotar porque otro proceso tiene la
+        base tomada, se sigue. Antes esto tiraba la petición entera con un 500
+        y el usuario perdía la pantalla por no poder guardar un timestamp.
+        """
         p = self.perfil(id_)
-        if p:
-            p.ultima_actividad = datetime.utcnow()
+        if not p:
+            return
+        p.ultima_actividad = datetime.utcnow()
+        try:
             self.con.execute(
                 "UPDATE perfiles SET datos = ? WHERE id = ?", (self._a_json(p), p.id)
             )
             self.con.commit()
+        except sqlite3.OperationalError:
+            pass
 
     # ------------------------------------------------------------------
     # Cupos
