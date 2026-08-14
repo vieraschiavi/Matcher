@@ -3,6 +3,17 @@ import Logo from "./Logo";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api } from "./api";
 import { useApp } from "./estado";
+import {
+  IcoChat,
+  IcoCorazon,
+  IcoDiamante,
+  IcoFiltros,
+  IcoLlama,
+  IcoPersona,
+  IcoRadar,
+  IcoSalir,
+  IcoTrofeo,
+} from "./Iconos";
 import Chat from "./paginas/Chat";
 import Completar from "./paginas/Completar";
 import Cruces from "./paginas/Cruces";
@@ -14,18 +25,28 @@ import Planes from "./paginas/Planes";
 import Radar from "./paginas/Radar";
 import Ranking from "./paginas/Ranking";
 
+// Los íconos son SVG propios (`Iconos.jsx`), no emoji: el emoji lo dibuja el
+// sistema, así que cambiaba de forma entre Android, iOS y el navegador, y no
+// se podía teñir con el color del ítem activo.
+// `corta` es la etiqueta de la barra inferior del teléfono. En la lateral hay
+// lugar para "Te gustaron"; abajo, con 51 px por pestaña, ese texto se partía
+// en dos renglones y la barra quedaba con aire de maqueta.
+//
+// `principal` marca las cinco que van en la barra inferior. Ocho pestañas
+// abajo no las tiene ninguna app de la categoría, y no es capricho: no entran
+// sin romper el texto. Las otras tres viven en la barra de arriba del
+// teléfono, que igual son de consulta, no de uso continuo.
 const MENU = [
-  { a: "/descubrir", icono: "🔥", texto: "Descubrir" },
-  { a: "/radar", icono: "📍", texto: "Radar" },
-  { a: "/matches", icono: "💬", texto: "Matches", globo: "matches" },
-  { a: "/likes", icono: "💛", texto: "Te gustaron", globo: "likes" },
-  { a: "/ranking", icono: "🏆", texto: "Más votados" },
-  // Nada de 🎛️ ni 🙂: en Android se dibujan como un dado y una cara plana y
-  // no se entiende qué son. Los que quedaron se leen igual en las tres.
-  { a: "/filtros", icono: "⚙️", texto: "Filtros" },
-  { a: "/perfil", icono: "👤", texto: "Mi perfil" },
-  { a: "/planes", icono: "💎", texto: "Planes" },
+  { a: "/descubrir", Icono: IcoLlama, texto: "Descubrir", corta: "Descubrir", principal: true },
+  { a: "/radar", Icono: IcoRadar, texto: "Radar", corta: "Radar", principal: true },
+  { a: "/matches", Icono: IcoChat, texto: "Matches", corta: "Chats", globo: "matches", principal: true },
+  { a: "/likes", Icono: IcoCorazon, texto: "Te gustaron", corta: "Likes", globo: "likes", principal: true },
+  { a: "/perfil", Icono: IcoPersona, texto: "Mi perfil", corta: "Perfil", principal: true },
+  { a: "/ranking", Icono: IcoTrofeo, texto: "Más votados", corta: "Top" },
+  { a: "/filtros", Icono: IcoFiltros, texto: "Filtros", corta: "Filtros" },
+  { a: "/planes", Icono: IcoDiamante, texto: "Planes", corta: "Planes" },
 ];
+const SECUNDARIAS = MENU.filter((m) => !m.principal);
 
 function Barra({ globos }) {
   const { perfil, salir } = useApp();
@@ -41,23 +62,68 @@ function Barra({ globos }) {
         <NavLink
           key={m.a}
           to={m.a}
-          className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}
+          className={({ isActive }) =>
+            `nav-item ${isActive ? "activo" : ""} ${m.principal ? "" : "solo-lateral"}`
+          }
         >
-          <span className="icono">{m.icono}</span>
-          <span>{m.texto}</span>
+          <span className="icono">
+            <m.Icono tam={20} />
+          </span>
+          <span className="nav-texto">{m.texto}</span>
+          <span className="nav-texto-corto">{m.corta}</span>
           {m.globo && globos[m.globo] > 0 && <span className="globo">{globos[m.globo]}</span>}
         </NavLink>
       ))}
       <div className="nav-pie">
-        <div style={{ padding: "0 12px 10px", fontSize: 12, color: "var(--muted)" }}>
-          {perfil?.nombre} · {perfil?.plan === "gratis" ? "Free" : perfil?.plan.toUpperCase()}
+        <div className="nav-quien">
+          <span className="nav-quien-nombre">{perfil?.nombre}</span>
+          <span className={`nav-plan ${perfil?.plan !== "gratis" ? "pago" : ""}`}>
+            {perfil?.plan === "gratis" ? "Free" : perfil?.plan.toUpperCase()}
+          </span>
         </div>
         <button className="nav-item" onClick={salir}>
-          <span className="icono">⏻</span>
+          <span className="icono">
+            <IcoSalir tam={20} />
+          </span>
           <span>Salir</span>
         </button>
       </div>
     </nav>
+  );
+}
+
+// Barra de arriba, sólo en teléfono (el CSS la esconde en escritorio, donde
+// todo esto ya está en la lateral). Lleva la marca y las tres secciones que
+// no entran abajo.
+function BarraSuperior() {
+  const { perfil } = useApp();
+  return (
+    <header className="barra-sup">
+      <div className="barra-sup-marca">
+        <Logo tam={26} id="sup" />
+        <b>
+          Match<span>er</span>
+        </b>
+        {perfil && (
+          <span className={`nav-plan ${perfil.plan !== "gratis" ? "pago" : ""}`}>
+            {perfil.plan === "gratis" ? "Free" : perfil.plan.toUpperCase()}
+          </span>
+        )}
+      </div>
+      <div className="barra-sup-acciones">
+        {SECUNDARIAS.map((m) => (
+          <NavLink
+            key={m.a}
+            to={m.a}
+            title={m.texto}
+            aria-label={m.texto}
+            className={({ isActive }) => `sup-boton ${isActive ? "activo" : ""}`}
+          >
+            <m.Icono tam={19} />
+          </NavLink>
+        ))}
+      </div>
+    </header>
   );
 }
 
@@ -156,6 +222,7 @@ export default function App() {
   return (
     <div className="layout">
       <Barra globos={globos} />
+      <BarraSuperior />
       <main className="main">
         <Routes>
           <Route path="/" element={<Navigate to="/descubrir" replace />} />

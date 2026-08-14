@@ -2,6 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
 import { useApp } from "../estado";
+import {
+  IcoCorazon,
+  IcoCruz,
+  IcoDeshacer,
+  IcoDiamante,
+  IcoEstrella,
+  IcoPelota,
+  IcoPin,
+  IcoRegla,
+  IcoVerificado,
+  IcoVoto,
+} from "../Iconos";
 
 const MOTIVOS_VACIO = {
   genero: "por el género que buscás",
@@ -75,18 +87,40 @@ function Carta({ tarjeta, fondo, arrastre, onFoto }) {
       <div className="carta-datos">
         <div className="carta-nombre">
           {tarjeta.nombre} <span className="edad">{tarjeta.edad}</span>
-          {tarjeta.verificado && <span className="insignia insignia-verif">✓</span>}
+          {tarjeta.verificado && (
+            <span className="verif-sello" title="Perfil verificado">
+              <IcoVerificado tam={19} />
+            </span>
+          )}
         </div>
         <div className="carta-linea">
-          <span>{tarjeta.altura_cm} cm</span>
-          {tarjeta.equipo && <span>⚽ {tarjeta.equipo}</span>}
-          <span>🗳️ {tarjeta.politica}</span>
-          {tarjeta.distancia_km != null && <span>📍 {tarjeta.distancia_km} km</span>}
+          {tarjeta.distancia_km != null && (
+            <span>
+              <IcoPin tam={14} /> {tarjeta.distancia_km} km
+            </span>
+          )}
+          <span>
+            <IcoRegla tam={14} /> {tarjeta.altura_cm} cm
+          </span>
+          {tarjeta.equipo && (
+            <span>
+              <IcoPelota tam={14} /> {tarjeta.equipo}
+            </span>
+          )}
+          <span>
+            <IcoVoto tam={14} /> {tarjeta.politica}
+          </span>
         </div>
         {tarjeta.bio && <div className="carta-bio">{tarjeta.bio}</div>}
-        <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-          <span className="insignia insignia-comp">{tarjeta.compatibilidad}% compatibles</span>
-          {tarjeta.es_premium && <span className="insignia insignia-oro">💎 Premium</span>}
+        <div className="carta-insignias">
+          <span className="insignia insignia-comp">
+            <b>{tarjeta.compatibilidad}%</b> compatibles
+          </span>
+          {tarjeta.es_premium && (
+            <span className="insignia insignia-oro">
+              <IcoDiamante tam={12} /> Premium
+            </span>
+          )}
           {tarjeta.sintetico && <span className="insignia insignia-sint">Perfil sintético</span>}
         </div>
       </div>
@@ -239,22 +273,34 @@ export default function Descubrir() {
                 className="accion rebobinar"
                 onClick={rebobinar}
                 title={cupos?.rebobinar ? "Rebobinar" : "Rebobinar es de Plus"}
+                aria-label="Rebobinar"
               >
-                ↺
+                <IcoDeshacer tam={20} />
               </button>
-              <button className="accion grande nope" onClick={() => decidir("pass")} title="Pasar">
-                ✕
+              <button
+                className="accion grande nope"
+                onClick={() => decidir("pass")}
+                title="Pasar"
+                aria-label="Pasar"
+              >
+                <IcoCruz tam={27} />
               </button>
               <button
                 className="accion fan"
                 onClick={() => decidir("superfan")}
                 disabled={cupos?.superfans_restantes === 0}
                 title="Superfan"
+                aria-label="Superfan"
               >
-                ★
+                <IcoEstrella tam={20} relleno />
               </button>
-              <button className="accion grande like" onClick={() => decidir("like")} title="Like">
-                ♥
+              <button
+                className="accion grande like"
+                onClick={() => decidir("like")}
+                title="Like"
+                aria-label="Me gusta"
+              >
+                <IcoCorazon tam={27} relleno />
               </button>
             </div>
           )}

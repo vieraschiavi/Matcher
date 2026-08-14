@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
+import { IcoCorazon, IcoPin, IcoRayo, IcoVerificado } from "../Iconos";
 
 // Radar en SVG, no un mapa de verdad: no hay tiles sin salir a internet desde
 // el APK y sin clave de un proveedor de mapas. Lo que sí importa —cuánta
@@ -296,16 +297,28 @@ function FichaGente({ p, onLike, cruces = 0 }) {
           {p.nombre} <span>{p.edad}</span>
         </b>
         <div className="ficha-linea">
-          {p.distancia_km != null && <span>📍 {p.distancia_km} km</span>}
-          {cruces > 0 && <span className="ficha-cruce">✨ {cruces}x</span>}
+          {p.distancia_km != null && (
+            <span>
+              <IcoPin tam={13} /> {p.distancia_km} km
+            </span>
+          )}
+          {cruces > 0 && (
+            <span className="ficha-cruce">
+              <IcoRayo tam={13} /> {cruces}x
+            </span>
+          )}
         </div>
         <div className="ficha-insignias">
           <span className="insignia insignia-comp">{p.compatibilidad}%</span>
-          {p.verificado && <span className="insignia insignia-verif">✓</span>}
+          {p.verificado && (
+            <span className="verif-sello" title="Verificado">
+              <IcoVerificado tam={16} />
+            </span>
+          )}
         </div>
       </div>
       <button className="ficha-like" onClick={onLike} aria-label={`Me gusta ${p.nombre}`}>
-        ♥
+        <IcoCorazon tam={19} relleno />
       </button>
     </article>
   );

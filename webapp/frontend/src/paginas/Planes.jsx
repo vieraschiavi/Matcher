@@ -96,8 +96,11 @@ export default function Planes() {
         <button className={periodo === "mensual" ? "on" : ""} onClick={() => setPeriodo("mensual")}>
           Mensual
         </button>
+        {/* "Anual (más barato)" se partía en dos renglones dentro de la
+            pestaña y descolocaba la fila entera. El ahorro va en una etiqueta
+            aparte, que además se lee mejor que entre paréntesis. */}
         <button className={periodo === "anual" ? "on" : ""} onClick={() => setPeriodo("anual")}>
-          Anual (más barato)
+          Anual <span className="ahorro">−20%</span>
         </button>
       </div>
 

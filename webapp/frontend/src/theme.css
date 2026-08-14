@@ -33,6 +33,26 @@
   --azul: #5b8def;
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --nav-alto: 0px; /* lo pisa el modo móvil */
+
+  /* Profundidad.
+     Antes todo se separaba con un borde de 1px del mismo color: plano y con
+     aire de plantilla. Las sombras en capas (una corta y marcada, otra larga
+     y difusa) son lo que hace que una tarjeta parezca apoyada y no dibujada.
+     La --sombra-color tiñe la sombra de la tarjeta con el acento en vez de
+     usar negro puro, que apaga la foto. */
+  --sombra-1: 0 1px 2px rgba(0, 0, 0, .28);
+  --sombra-2: 0 2px 4px rgba(0, 0, 0, .22), 0 8px 20px -6px rgba(0, 0, 0, .45);
+  --sombra-3: 0 4px 10px rgba(0, 0, 0, .3), 0 24px 48px -12px rgba(0, 0, 0, .6);
+  --sombra-color: 0 18px 40px -14px rgba(201, 24, 74, .55);
+
+  /* Radios en escala. Un único radio para todo es el tic más delator de una
+     interfaz sin diseñar: el chip y la tarjeta no pueden curvarse igual. */
+  --r-chico: 8px;
+  --r-medio: 13px;
+  --r-grande: 20px;
+  --r-total: 999px;
+
+  --resorte: cubic-bezier(.22, 1.2, .36, 1);
 }
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
@@ -40,10 +60,21 @@ body {
   margin: 0; background: var(--navy-950); color: var(--ink);
   font-family: var(--sans); font-size: 14.5px; line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   /* En el APK el contenido no puede quedar debajo de la barra de estado. */
   padding-top: env(safe-area-inset-top);
   overscroll-behavior-y: none;
 }
+/* Dos luces de fondo, fijas y muy difusas. Un fondo plano de un solo color
+   delata el degradado de plantilla; esto le da profundidad sin que se note de
+   dónde viene. Va en ::before para no ensuciar el stacking de la app. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(58vw 42vh at 12% -8%, rgba(201, 24, 74, .17), transparent 62%),
+    radial-gradient(52vw 40vh at 96% 4%, rgba(142, 91, 239, .15), transparent 60%);
+}
+#root { position: relative; z-index: 1; }
 a { color: inherit; text-decoration: none; }
 button { font-family: inherit; }
 .tnum { font-variant-numeric: tabular-nums; }
@@ -51,8 +82,17 @@ button { font-family: inherit; }
 /* ---- layout ---- */
 .layout { display: flex; min-height: 100%; }
 .main { flex: 1; min-width: 0; padding: 26px 30px calc(56px + var(--nav-alto)); }
-.page-title { font-size: 22px; font-weight: 800; letter-spacing: -.01em; margin: 0 0 4px; }
-.page-sub { color: var(--muted); font-size: 13.5px; margin: 0 0 22px; max-width: 76ch; }
+/* El tracking negativo crece con el tamaño: a 26px la misma separación que a
+   14px se ve suelta y amateur. Es la diferencia entre "texto grande" y
+   titular. */
+.page-title { font-size: 26px; font-weight: 800; letter-spacing: -.028em; margin: 0 0 5px; line-height: 1.15; }
+.page-sub { color: var(--muted); font-size: 13.5px; margin: 0 0 22px; max-width: 68ch; }
+
+/* ---- barra superior (sólo teléfono) ----
+   En escritorio no existe: la marca y estas tres secciones ya están en la
+   lateral. Aparece en el @media de abajo. */
+.barra-sup { display: none; }
+.nav-texto-corto { display: none; }
 
 /* ---- barra lateral (Kobra) ---- */
 .sidebar {
@@ -70,12 +110,24 @@ button { font-family: inherit; }
 .brand b { font-size: 15px; letter-spacing: .01em; }
 .brand b span { color: var(--coral); }
 .nav-item {
-  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
-  border-radius: 9px; color: var(--muted); font-weight: 600; font-size: 13.5px;
+  display: flex; align-items: center; gap: 11px; padding: 9px 12px;
+  border-radius: var(--r-medio); color: var(--muted); font-weight: 600; font-size: 13.5px;
   border: 1px solid transparent; cursor: pointer; background: none; width: 100%;
-  text-align: left;
+  text-align: left; position: relative;
+  transition: color .16s ease, background .16s ease;
 }
+/* El ícono es SVG y hereda currentColor: se apaga y se enciende con el ítem,
+   cosa que con emoji era imposible. */
+.nav-item .icono { display: grid; place-items: center; flex: none; opacity: .75; transition: opacity .16s ease; }
 .nav-item:hover { background: var(--navy-800); color: var(--ink); }
+.nav-item:hover .icono, .nav-item.activo .icono { opacity: 1; }
+/* Barrita a la izquierda del activo: se lee de un vistazo dónde estás, sin
+   depender de una diferencia de fondo de dos tonos. */
+.nav-item.activo::before {
+  content: ""; position: absolute; left: -13px; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 21px; border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--coral), var(--violeta));
+}
 .nav-item.activo {
   background: var(--navy-800); color: var(--ink); border-color: var(--line);
   box-shadow: inset 3px 0 0 var(--coral);
@@ -85,13 +137,37 @@ button { font-family: inherit; }
   font-size: 11px; font-weight: 800; padding: 1px 7px; min-width: 20px; text-align: center;
 }
 .nav-pie { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; }
+.nav-quien { display: flex; align-items: center; gap: 8px; padding: 2px 12px 11px; }
+.nav-quien-nombre {
+  font-size: 12.5px; color: var(--muted); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Micro-etiqueta: mayúsculas, chiquita y con el tracking abierto. Es el
+   recurso que separa un dato de servicio de un texto cualquiera. */
+.nav-plan {
+  font-size: 9.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  padding: 2.5px 7px; border-radius: var(--r-total); flex: none;
+  background: var(--navy-800); color: var(--faint); border: 1px solid var(--line);
+}
+.nav-plan.pago {
+  background: linear-gradient(135deg, rgba(242, 180, 65, .22), rgba(201, 24, 74, .22));
+  color: var(--amber); border-color: rgba(242, 180, 65, .45);
+}
 
 /* ---- tarjetas y superficies ---- */
 .panel {
   background: var(--navy-900); border: 1px solid var(--line);
-  border-radius: 14px; padding: 18px;
+  border-radius: var(--r-grande); padding: 18px;
+  box-shadow: var(--sombra-2); position: relative;
 }
-.panel h3 { margin: 0 0 12px; font-size: 15px; font-weight: 700; }
+/* Filo de luz arriba. Es un pixel y es lo que hace que la superficie parezca
+   tener volumen en vez de ser un rectángulo más oscuro. */
+.panel::before {
+  content: ""; position: absolute; inset: 0 0 auto; height: 1px;
+  border-radius: var(--r-grande) var(--r-grande) 0 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .09) 22%, rgba(255, 255, 255, .09) 78%, transparent);
+}
+.panel h3 { margin: 0 0 12px; font-size: 15px; font-weight: 700; letter-spacing: -.012em; }
 .grid { display: grid; gap: 14px; }
 .grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .grid-3 { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
@@ -103,16 +179,31 @@ button { font-family: inherit; }
 /* ---- botones ---- */
 .btn {
   border: 1px solid var(--line); background: var(--navy-800); color: var(--ink);
-  border-radius: 10px; padding: 9px 15px; font-weight: 700; font-size: 13.5px; cursor: pointer;
+  border-radius: var(--r-medio); padding: 10px 16px; font-weight: 700; font-size: 13.5px;
+  cursor: pointer; box-shadow: var(--sombra-1);
+  transition: transform .14s var(--resorte), border-color .16s ease, box-shadow .16s ease;
 }
-.btn:hover { border-color: var(--coral); }
+.btn:hover:not(:disabled) { border-color: var(--coral); transform: translateY(-1px); box-shadow: var(--sombra-2); }
+/* El botón se hunde al tocarlo. En un teléfono no hay hover: sin este
+   feedback el toque no se siente y la gente vuelve a apretar. */
+.btn:active:not(:disabled) { transform: translateY(1px) scale(.988); box-shadow: var(--sombra-1); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn-primario {
   background: linear-gradient(135deg, var(--coral), var(--coral-deep));
   border-color: transparent; color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 22px -8px rgba(201, 24, 74, .8);
 }
-.btn-fantasma { background: none; }
+.btn-primario:hover:not(:disabled) {
+  border-color: transparent;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .3), 0 14px 30px -8px rgba(201, 24, 74, .9);
+}
+.btn-fantasma { background: none; box-shadow: none; }
 .btn-bloque { width: 100%; }
+/* Foco visible para teclado, que en la mayoría de las plantillas se elimina
+   con outline:none y deja la app inusable sin mouse. */
+.btn:focus-visible, .nav-item:focus-visible, .accion:focus-visible, .chip:focus-visible {
+  outline: 2px solid var(--coral); outline-offset: 2px;
+}
 
 /* ---- radar ---- */
 .radar-svg { width: 100%; height: auto; display: block; }
@@ -155,28 +246,34 @@ button { font-family: inherit; }
 .ficha-datos { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px 12px; }
 .ficha-datos b { font-size: 15.5px; font-weight: 800; display: block; }
 .ficha-datos b span { font-weight: 500; opacity: .9; }
-.ficha-linea { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; color: #cfd9ea; margin-top: 2px; }
+.ficha-linea { display: flex; gap: 4px 10px; flex-wrap: wrap; font-size: 12px; color: rgba(255, 255, 255, .78); margin-top: 3px; }
+.ficha-linea span { display: inline-flex; align-items: center; gap: 4px; }
+.ficha-linea svg { opacity: .7; flex: none; }
 .ficha-cruce { color: var(--amber); font-weight: 700; }
+.ficha-cruce svg { opacity: 1; }
 .ficha-insignias { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
 .ficha-like {
   position: absolute; top: 9px; right: 9px; width: 38px; height: 38px;
-  border-radius: 50%; border: none; cursor: pointer; font-size: 18px; color: #fff;
+  border-radius: 50%; border: none; cursor: pointer; color: #fff;
+  display: grid; place-items: center;
   background: linear-gradient(135deg, var(--coral), var(--coral-deep));
-  box-shadow: 0 6px 16px rgba(201,24,74,.45);
+  box-shadow: 0 6px 16px rgba(201, 24, 74, .5);
+  transition: transform .2s var(--resorte), box-shadow .2s ease;
 }
-.ficha-like:active { transform: scale(.92); }
+.ficha-like:hover { transform: scale(1.1); box-shadow: 0 8px 22px rgba(201, 24, 74, .75); }
+.ficha-like:active { transform: scale(.86); transition-duration: .09s; }
 .deck {
   position: relative; width: 100%; aspect-ratio: 4 / 5.4;
   max-height: calc(100vh - 230px);
   touch-action: pan-y;
 }
 .carta {
-  position: absolute; inset: 0; border-radius: 20px; overflow: hidden;
-  background: var(--navy-800); border: 1px solid var(--line);
-  box-shadow: 0 22px 50px rgba(0, 0, 0, .5);
+  position: absolute; inset: 0; border-radius: 26px; overflow: hidden;
+  background: var(--navy-800); border: 1px solid rgba(255, 255, 255, .07);
+  box-shadow: var(--sombra-3), var(--sombra-color);
   user-select: none; -webkit-user-select: none;
 }
-.carta.fondo { transform: scale(.955) translateY(14px); filter: brightness(.72); }
+.carta.fondo { transform: scale(.945) translateY(16px); filter: brightness(.6) saturate(.8); }
 /* object-position arriba del centro: cuando una foto es más cuadrada que la
    tarjeta, `cover` recorta y lo que se pierde tiene que ser el torso, nunca la
    cabeza. Las del pack ya vienen en 4:5.4, pero las que sube un usuario no. */
@@ -185,16 +282,41 @@ button { font-family: inherit; }
   display: block; pointer-events: none;
 }
 .carta video.foto { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+/* Un degradado lineal recto deja un borde visible donde termina. Con varias
+   paradas la caída es más parecida a la de una foto de verdad y el nombre se
+   apoya sin que se vea "la barra oscura". */
 .carta-velo {
   position: absolute; inset: 0;
-  background: linear-gradient(to top, rgba(6, 10, 20, .94) 4%, rgba(6, 10, 20, .55) 32%, transparent 58%);
+  background: linear-gradient(to top,
+    rgba(8, 5, 14, .96) 0%,
+    rgba(8, 5, 14, .88) 12%,
+    rgba(8, 5, 14, .6) 28%,
+    rgba(8, 5, 14, .26) 42%,
+    transparent 60%);
   pointer-events: none;
 }
-.carta-datos { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 18px 18px; }
-.carta-nombre { font-size: 25px; font-weight: 800; letter-spacing: -.02em; display: flex; align-items: baseline; gap: 9px; }
-.carta-nombre .edad { font-weight: 500; opacity: .9; font-size: 21px; }
-.carta-linea { color: #cfd9ea; font-size: 13px; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 6px 12px; }
-.carta-bio { color: #dbe4f2; font-size: 13.5px; margin-top: 9px; }
+.carta-datos { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 20px 20px; }
+.carta-nombre {
+  font-size: 29px; font-weight: 800; letter-spacing: -.032em;
+  display: flex; align-items: baseline; gap: 9px; line-height: 1.05;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .5);
+}
+.carta-nombre .edad { font-weight: 400; opacity: .82; font-size: 22px; letter-spacing: -.02em; }
+.carta-linea {
+  color: rgba(255, 255, 255, .82); font-size: 12.5px; margin-top: 7px;
+  display: flex; flex-wrap: wrap; gap: 5px 14px;
+}
+/* Cada dato es ícono + texto alineados por el centro óptico. */
+.carta-linea span { display: inline-flex; align-items: center; gap: 5px; }
+.carta-linea svg { opacity: .65; flex: none; }
+.carta-bio {
+  color: rgba(255, 255, 255, .9); font-size: 13.5px; margin-top: 10px; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.carta-insignias { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+/* Sello de verificado: el tilde azul de la categoría, en SVG para que no
+   dependa del emoji del sistema. */
+.verif-sello { color: #6ba4ff; display: inline-flex; align-items: center; flex: none; }
 
 /* Barritas de progreso de las fotos, arriba de la tarjeta (patrón de stories:
    es lo que la gente ya sabe usar sin que se lo expliquen). */
@@ -229,17 +351,30 @@ button { font-family: inherit; }
 /* ---- botonera de acciones ---- */
 .acciones { display: flex; justify-content: center; align-items: center; gap: 14px; margin-top: 18px; }
 .accion {
-  width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--navy-800); border: 1px solid var(--line); cursor: pointer;
-  font-size: 23px; color: var(--ink); transition: transform .12s ease;
+  width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center;
+  background: linear-gradient(160deg, var(--navy-800), var(--navy-900));
+  border: 1px solid var(--line); cursor: pointer; color: var(--ink);
+  box-shadow: var(--sombra-2);
+  transition: transform .2s var(--resorte), box-shadow .2s ease, border-color .2s ease;
 }
-.accion:hover:not(:disabled) { transform: translateY(-3px); }
-.accion:disabled { opacity: .38; cursor: not-allowed; }
-.accion.grande { width: 68px; height: 68px; font-size: 27px; }
-.accion.nope { color: var(--red); border-color: rgba(255, 118, 117, .45); }
-.accion.like { color: var(--green); border-color: rgba(124, 194, 66, .5); }
-.accion.fan { color: var(--azul); border-color: rgba(91, 141, 239, .5); }
-.accion.rebobinar { color: var(--amber); border-color: rgba(242, 180, 65, .45); }
+.accion:hover:not(:disabled) { transform: translateY(-4px) scale(1.06); }
+/* Rebote al soltar, no un simple encogido: es un gesto de decisión y tiene
+   que devolver algo. La curva --resorte pasa de largo y vuelve. */
+.accion:active:not(:disabled) { transform: scale(.86); transition-duration: .09s; }
+.accion:disabled { opacity: .32; cursor: not-allowed; box-shadow: none; }
+.accion.grande { width: 66px; height: 66px; }
+.accion.nope { color: var(--red); border-color: rgba(255, 118, 117, .4); }
+.accion.nope:hover:not(:disabled) { box-shadow: var(--sombra-2), 0 10px 26px -8px rgba(255, 118, 117, .7); }
+.accion.like { color: var(--coral); border-color: rgba(255, 77, 109, .45); }
+.accion.like:hover:not(:disabled) { box-shadow: var(--sombra-2), 0 10px 26px -8px rgba(255, 77, 109, .85); }
+.accion.fan { color: var(--azul); border-color: rgba(91, 141, 239, .45); }
+.accion.fan:hover:not(:disabled) { box-shadow: var(--sombra-2), 0 10px 26px -8px rgba(91, 141, 239, .8); }
+.accion.rebobinar { color: var(--amber); border-color: rgba(242, 180, 65, .4); }
+
+/* Quien pidió menos movimiento en el sistema, recibe menos movimiento. */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
 
 /* ---- formularios ---- */
 label.campo { display: block; margin-bottom: 13px; }
@@ -260,19 +395,60 @@ textarea { resize: vertical; min-height: 78px; }
   display: flex; justify-content: space-between; font-size: 13px; font-weight: 800;
   margin-bottom: 8px; font-variant-numeric: tabular-nums;
 }
+/* Slider simple (el radio del radar). El de rango doble ya tenía estilo; éste
+   se había quedado con el nativo, que en Chrome es una barra azul brillante —
+   el único elemento de toda la app que no seguía la paleta, y el que más
+   delataba que la pantalla estaba sin terminar. */
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 22px; background: none; padding: 0; border: none; cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 5px; border-radius: var(--r-total);
+  background: linear-gradient(90deg, var(--coral), var(--violeta));
+}
+input[type="range"]::-moz-range-track {
+  height: 5px; border-radius: var(--r-total);
+  background: linear-gradient(90deg, var(--coral), var(--violeta));
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 20px; height: 20px; border-radius: 50%; margin-top: -7.5px;
+  background: #fff; border: none; box-shadow: var(--sombra-2);
+  transition: transform .16s var(--resorte);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; border: none; box-shadow: var(--sombra-2);
+}
+input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.22); }
+input[type="range"]:focus { outline: none; }
+input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--coral); outline-offset: 2px; }
+
 .rango-doble-pista { position: relative; height: 28px; }
+/* Son DOS inputs superpuestos. El riel no puede dibujarlo cada uno: el track
+   del segundo se pintaba encima del pulgar del primero y lo cruzaba por el
+   medio con una raya — el pulgar de la izquierda parecía partido en dos.
+   Así que los dos tracks van transparentes y el riel es un elemento aparte,
+   debajo de todo. */
+.rango-doble-pista::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 12px; height: 4px;
+  border-radius: 2px; background: var(--line); z-index: 0;
+}
 .rango-doble-relleno {
-  position: absolute; top: 12px; height: 4px; background: var(--coral); border-radius: 2px;
+  position: absolute; top: 12px; height: 4px; border-radius: 2px; z-index: 1;
+  background: linear-gradient(90deg, var(--coral), var(--violeta));
 }
 .rango-doble-pista input[type="range"] {
   position: absolute; top: 0; left: 0; width: 100%; height: 28px; margin: 0;
   background: none; -webkit-appearance: none; appearance: none; pointer-events: none;
+  z-index: 2;
 }
 .rango-doble-pista input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px; background: var(--line); border-radius: 2px;
+  height: 4px; background: transparent; border-radius: 2px;
 }
 .rango-doble-pista input[type="range"]::-moz-range-track {
-  height: 4px; background: var(--line); border-radius: 2px;
+  height: 4px; background: transparent; border-radius: 2px;
 }
 .rango-doble-pista input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; pointer-events: auto; width: 20px; height: 20px; margin-top: -8px;
@@ -283,13 +459,26 @@ textarea { resize: vertical; min-height: 78px; }
   border: 3px solid var(--coral); cursor: pointer;
 }
 
+/* Etiqueta de ahorro dentro de la pestaña "Anual". */
+.ahorro {
+  display: inline-block; margin-left: 5px; padding: 1.5px 6px; border-radius: var(--r-total);
+  background: rgba(124, 194, 66, .2); color: var(--green);
+  font-size: 10.5px; font-weight: 800; letter-spacing: .02em; vertical-align: 1px;
+}
+
 /* Chips: filtros de política, equipo e intereses. */
 .chips { display: flex; flex-wrap: wrap; gap: 7px; }
 .chip {
   border: 1px solid var(--line); background: var(--navy-800); color: var(--muted);
-  border-radius: 999px; padding: 6px 13px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  border-radius: var(--r-total); padding: 6px 13px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .15s var(--resorte);
 }
-.chip.on { background: rgba(255, 77, 109, .16); border-color: var(--coral); color: #ffd7de; }
+.chip:hover { border-color: var(--faint); color: var(--ink); }
+.chip:active { transform: scale(.95); }
+.chip.on {
+  background: rgba(255, 77, 109, .16); border-color: var(--coral); color: #ffd7de;
+  box-shadow: 0 4px 14px -6px rgba(255, 77, 109, .7);
+}
 
 /* ---- tabla (densidad Kobra, para el ranking) ---- */
 table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
@@ -443,21 +632,68 @@ table.tabla tr:hover td { background: var(--navy-800); }
 @media (max-width: 860px) {
   :root { --nav-alto: 62px; }
   .layout { flex-direction: column; }
+  /* Barra inferior de vidrio: deja ver la foto de la tarjeta pasando por
+     debajo en vez de cortarla con una banda opaca. El fallback opaco va
+     primero para los WebView viejos sin backdrop-filter. */
   .sidebar {
     position: fixed; bottom: 0; left: 0; right: 0; top: auto; width: auto; height: auto;
-    flex-direction: row; border-right: none; border-top: 1px solid var(--line);
-    padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); z-index: 50; gap: 0;
+    flex-direction: row; border-right: none; border-top: 1px solid rgba(255, 255, 255, .08);
+    padding: 7px 4px calc(7px + env(safe-area-inset-bottom)); z-index: 50; gap: 0;
+    background: var(--navy-900);
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, .45);
+  }
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .sidebar {
+      background: rgba(26, 18, 38, .82);
+      -webkit-backdrop-filter: blur(18px) saturate(1.5);
+      backdrop-filter: blur(18px) saturate(1.5);
+    }
   }
   .brand, .nav-pie { display: none; }
+  /* Las tres secundarias salen de la barra inferior y pasan a la de arriba. */
+  .nav-item.solo-lateral { display: none; }
+  .nav-texto { display: none; }
+  .nav-texto-corto { display: block; }
+
+  .barra-sup {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    position: sticky; top: 0; z-index: 40;
+    padding: 10px 14px; margin: 0;
+    background: rgba(18, 13, 28, .78);
+    border-bottom: 1px solid rgba(255, 255, 255, .07);
+  }
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .barra-sup { -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4); }
+  }
+  .barra-sup-marca { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .barra-sup-marca b { font-size: 15px; letter-spacing: -.015em; }
+  .barra-sup-marca b span { color: var(--coral); }
+  .barra-sup-acciones { display: flex; gap: 6px; flex: none; }
+  .sup-boton {
+    width: 36px; height: 36px; border-radius: var(--r-medio); display: grid; place-items: center;
+    color: var(--muted); background: var(--navy-800); border: 1px solid var(--line);
+    transition: color .16s ease, border-color .16s ease;
+  }
+  .sup-boton.activo { color: var(--coral); border-color: rgba(255, 77, 109, .5); }
+
   .nav-item {
     flex-direction: column; gap: 3px; font-size: 10.5px; padding: 6px 2px;
-    justify-content: center; text-align: center;
+    justify-content: center; text-align: center; font-weight: 700;
+    letter-spacing: -.01em;
   }
-  .nav-item.activo { box-shadow: none; background: none; color: var(--coral); }
-  .nav-item .icono { font-size: 20px; }
-  .nav-item .globo { position: absolute; margin: 0; transform: translate(14px, -10px); }
+  .nav-item.activo { box-shadow: none; background: none; color: var(--coral); border-color: transparent; }
+  /* En la barra inferior la barrita lateral no aplica: pasa a ser un punto
+     debajo del ícono. */
+  .nav-item.activo::before {
+    left: 50%; top: auto; bottom: 1px; transform: translateX(-50%);
+    width: 15px; height: 2.5px; border-radius: 3px;
+    background: linear-gradient(90deg, var(--coral), var(--violeta));
+  }
+  .nav-item .icono { opacity: 1; }
+  .nav-item .globo { position: absolute; margin: 0; transform: translate(15px, -11px); }
   .main { padding: 16px 14px calc(20px + var(--nav-alto)); }
   .deck-zona, .zona-chat, .zona-radar { grid-template-columns: 1fr; }
   .deck { max-height: none; aspect-ratio: 4 / 5.4; }
-  .page-title { font-size: 19px; }
+  .page-title { font-size: 22px; }
+  .carta-nombre { font-size: 26px; }
 }
