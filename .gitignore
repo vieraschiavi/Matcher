@@ -14,10 +14,33 @@ venv/
 node_modules/
 webapp/frontend/dist/
 
-# Capacitor: los proyectos nativos se generan con `npm run init:android`
-# y `npm run init:ios`. Commitearlos ata el repo a una versión del SDK.
-android/
-ios/
+# Capacitor: los proyectos nativos SÍ se commitean.
+#
+# Estaban ignorados y fue un error: para publicar en Play Store y App Store
+# hacen falta cosas que viven ahí y que no se pueden regenerar —
+# el versionCode, los permisos del manifest, los íconos y los textos de
+# permiso del Info.plist. Regenerándolos en cada build, todo eso se perdía.
+# Lo que sí se ignora es la salida de compilación.
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+android/.idea/
+android/app/release/
+ios/App/build/
+ios/App/Pods/
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/App.xcodeproj/xcuserdata/
+ios/DerivedData/
+
+# Claves de firma. NUNCA en el repo: si se filtra el keystore de publicación,
+# no se puede rotar — hay que publicar una app nueva.
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
 
 # Sistema
 .DS_Store

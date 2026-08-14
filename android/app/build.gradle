@@ -1,0 +1,88 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace "com.matcher.app"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.matcher.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // Play Store rechaza un envío con un versionCode que ya usaste, así
+        // que en CI se pisa con el número de corrida. El default sirve para
+        // compilar a mano sin pensar en esto.
+        versionCode System.getenv("MATCHER_VERSION_CODE") ? System.getenv("MATCHER_VERSION_CODE").toInteger() : 1
+        versionName System.getenv("MATCHER_VERSION_NAME") ?: "1.0.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    // Firma para Play Store.
+    //
+    // La clave NUNCA entra al repositorio: se lee de variables de entorno (en
+    // CI, de los secrets). Un keystore commiteado es la llave de publicación
+    // de la app, y si se filtra no se puede rotar — Google firma con esa
+    // identidad para siempre y hay que publicar una app nueva.
+    //
+    // Para generar la tuya, una sola vez, y guardarla fuera del repo:
+    //   keytool -genkey -v -keystore matcher.keystore -alias matcher \
+    //           -keyalg RSA -keysize 2048 -validity 10000
+    //
+    // Después: MATCHER_KEYSTORE, MATCHER_KEYSTORE_PASS, MATCHER_KEY_ALIAS,
+    // MATCHER_KEY_PASS. Sin esas variables, el release sale sin firmar (sirve
+    // para probar, no para publicar) y el build avisa en vez de fallar raro.
+    signingConfigs {
+        release {
+            def rutaKeystore = System.getenv("MATCHER_KEYSTORE")
+            if (rutaKeystore && file(rutaKeystore).exists()) {
+                storeFile file(rutaKeystore)
+                storePassword System.getenv("MATCHER_KEYSTORE_PASS")
+                keyAlias System.getenv("MATCHER_KEY_ALIAS")
+                keyPassword System.getenv("MATCHER_KEY_PASS")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (System.getenv("MATCHER_KEYSTORE")) {
+                signingConfig signingConfigs.release
+            } else {
+                logger.lifecycle("Matcher: sin MATCHER_KEYSTORE, el release queda SIN FIRMAR")
+            }
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

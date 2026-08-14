@@ -2,7 +2,20 @@
 // el manejo del 401 y del 402 (sin cupo) termina copiado en quince lugares y
 // alguno se olvida de alguno.
 
-const BASE = import.meta.env.DEV ? "" : "";
+// A dónde le pega la app.
+//
+// En web es same-origin: el propio backend sirve el dist/, así que alcanza con
+// rutas relativas. En el APK y en iOS NO: ahí el frontend vive en
+// capacitor://localhost y "/api" resolvería contra el propio WebView, que no
+// tiene backend. La app arrancaba en blanco y sin un solo error visible.
+//
+// Por eso la URL del servidor se compila adentro del bundle con
+// VITE_API_URL. Sin eso, un APK instalado no puede hablar con nadie.
+const NATIVO = typeof window !== "undefined" && /^(capacitor|ionic|file):/.test(window.location.protocol);
+const CONFIGURADA = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+export const BASE = CONFIGURADA || (NATIVO ? "https://api.matcher.app" : "");
+export const esNativo = NATIVO;
+
 const LLAVE = "matcher.token";
 
 export const token = {

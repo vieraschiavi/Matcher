@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fondo del ícono adaptativo. Va el navy de la marca y no el blanco que
+         trae Capacitor: sobre blanco, el degradado coral del logo se pierde
+         contra el fondo claro de muchos launchers. -->
+    <color name="ic_launcher_background">#0A1020</color>
+</resources>

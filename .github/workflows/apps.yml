@@ -1,0 +1,124 @@
+name: Apps (Android / iOS)
+
+# Compila las apps en cada push y deja los archivos descargables como
+# artefactos de la corrida. La idea es que nunca haga falta tener el SDK de
+# Android ni una Mac para conseguir un build: se baja de acá.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "URL del backend que va compilada en la app"
+        required: false
+        default: "https://api.matcher.app"
+
+env:
+  # El bundle lleva la URL del backend adentro: en el WebView no hay
+  # same-origin que valga. Se puede pisar al lanzar el workflow a mano.
+  VITE_API_URL: ${{ github.event.inputs.api_url || 'https://api.matcher.app' }}
+
+jobs:
+  android:
+    name: APK y AAB
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: webapp/frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+
+      - name: Compilar el frontend
+        run: npm run build:web
+
+      - name: Sincronizar Capacitor
+        run: |
+          npm install
+          npx cap sync android
+
+      - name: Compilar APK de debug
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+        env:
+          # versionCode único por corrida: Play rechaza uno repetido.
+          MATCHER_VERSION_CODE: ${{ github.run_number }}
+
+      - name: ¿Hay keystore cargado?
+        id: firma
+        # El contexto `secrets` no se puede usar directo en un `if`, así que
+        # se traduce a una salida del paso. Sin keystore el AAB se saltea en
+        # vez de fallar: un PR desde un fork no tiene acceso a los secrets y
+        # no tiene por qué romper el CI.
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "hay=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=no" >> "$GITHUB_OUTPUT"
+            echo "Sin ANDROID_KEYSTORE_BASE64 en los secrets: no se genera el AAB firmado."
+          fi
+
+      - name: Firmar y compilar el AAB de release
+        working-directory: android
+        if: steps.firma.outputs.hay == 'si'
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/matcher.keystore"
+          ./gradlew bundleRelease --no-daemon
+        env:
+          MATCHER_KEYSTORE: ${{ runner.temp }}/matcher.keystore
+          MATCHER_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          MATCHER_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          MATCHER_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
+          MATCHER_VERSION_CODE: ${{ github.run_number }}
+
+      - name: Guardar el APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: matcher-apk-debug
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Guardar el AAB para Play Store
+        uses: actions/upload-artifact@v4
+        if: ${{ hashFiles('android/app/build/outputs/bundle/release/*.aab') != '' }}
+        with:
+          name: matcher-aab-release
+          path: android/app/build/outputs/bundle/release/*.aab
+
+  ios:
+    name: Archivo iOS
+    # Runner de macOS: es la única forma de compilar iOS. Sin firma no se
+    # puede subir a App Store, pero sirve para verificar que el proyecto
+    # compila — que es lo que se rompe sin que nadie se entere.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: webapp/frontend/package-lock.json
+
+      - name: Compilar el frontend
+        run: npm run build:web
+
+      - name: Sincronizar Capacitor
+        run: |
+          npm install
+          npx cap sync ios
+
+      - name: Compilar sin firmar
+        working-directory: ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            build
