@@ -1,0 +1,5 @@
+# Dependencias de la función serverless. Sin uvicorn a propósito: el runtime
+# de Vercel habla ASGI directo, y cada megabyte de más alarga el arranque en
+# frío — que acá ya paga el costo de resembrar la demo.
+fastapi>=0.110
+pydantic>=2.6

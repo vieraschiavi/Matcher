@@ -142,8 +142,11 @@ class Registro(BaseModel):
     nacimiento: str            # ISO YYYY-MM-DD
     genero: str
     altura_cm: int
-    pais: str
-    ciudad: str
+    # País y ciudad son opcionales en el alta: el formulario ya no los
+    # pregunta (el país se deduce del idioma del teléfono) y se completan
+    # después desde "Mi perfil". Sin ciudad no hay radar, y la UI lo dice.
+    pais: str = ""
+    ciudad: str = ""
     politica: str = "neutro"
     equipo: str = ""
     bio: str = ""

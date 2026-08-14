@@ -36,15 +36,21 @@ export default function Entrar() {
     nacimiento: "1995-01-01",
     genero: "mujer",
     altura_cm: 170,
-    pais: "UY",
-    ciudad: "UY-MVD",
-    politica: "neutro",
-    equipo: "",
+    bio: "",
+    intereses: [],
     generos_busca: [], // vacío = Todos, igual que en Filtros
   });
 
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
-  const pais = catalogos?.paises.find((p) => p.codigo === f.pais);
+
+  // El país NO se pregunta en el alta: se deduce del idioma del teléfono
+  // ("es-UY" → UY) y listo. Junto con ciudad, equipo y política se puede
+  // ajustar después en "Mi perfil" — eran cuatro campos que espantaban en la
+  // pantalla de registro y ninguno hace falta para empezar a deslizar.
+  const paisDetectado = (() => {
+    const region = (navigator.language || "").split("-")[1]?.toUpperCase() || "";
+    return catalogos?.paises.some((p) => p.codigo === region) ? region : "";
+  })();
 
   useEffect(() => {
     api.proveedoresLogin().then((r) => setProveedores(r.proveedores)).catch(() => {});
@@ -90,10 +96,10 @@ export default function Entrar() {
           nacimiento: f.nacimiento,
           genero: f.genero,
           altura_cm: Number(f.altura_cm),
-          pais: f.pais,
-          ciudad: f.ciudad,
-          politica: f.politica,
-          equipo: f.equipo,
+          bio: f.bio,
+          intereses: f.intereses,
+          pais: paisDetectado,
+          ciudad: "",
           preferencias: { generos: f.generos_busca, edad_min: 18, edad_max: 99 },
         });
       }
@@ -224,60 +230,34 @@ export default function Entrar() {
                     ))}
                   </div>
                 </label>
-                <div className="fila">
-                  <label className="campo">
-                    <span>País</span>
-                    <select
-                      value={f.pais}
-                      onChange={(e) => {
-                        const p = catalogos?.paises.find((x) => x.codigo === e.target.value);
-                        setF({
-                          ...f,
-                          pais: e.target.value,
-                          ciudad: p?.ciudades[0]?.id || "",
-                          equipo: "", // el catálogo de equipos es del país nuevo
-                        });
-                      }}
-                    >
-                      {catalogos?.paises.map((p) => (
-                        <option key={p.codigo} value={p.codigo}>
-                          {p.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="campo">
-                    <span>Ciudad</span>
-                    <select value={f.ciudad} onChange={set("ciudad")}>
-                      {pais?.ciudades.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="fila">
-                  <label className="campo">
-                    <span>Postura política</span>
-                    <select value={f.politica} onChange={set("politica")}>
-                      <option value="izquierda">Izquierda</option>
-                      <option value="derecha">Derecha</option>
-                      <option value="neutro">Neutro</option>
-                    </select>
-                  </label>
-                  <label className="campo">
-                    <span>Equipo de {pais?.nombre}</span>
-                    <select value={f.equipo} onChange={set("equipo")}>
-                      <option value="">No me interesa el fútbol</option>
-                      {pais?.equipos.map((e) => (
-                        <option key={e} value={e}>
-                          {e}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
+                {/* País, ciudad, equipo y política salieron del alta a
+                    pedido: eran los campos que más espantaban en el registro
+                    y ninguno hace falta para empezar. Viven en "Mi perfil". */}
+                <label className="campo">
+                  <span>Tus hobbies (marcá los que quieras)</span>
+                  <div className="chips">
+                    {(catalogos?.intereses || []).map((i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className={`chip ${f.intereses.includes(i) ? "on" : ""}`}
+                        onClick={() => setF({ ...f, intereses: alternar(f.intereses, i) })}
+                      >
+                        {i}
+                      </button>
+                    ))}
+                  </div>
+                </label>
+                <label className="campo">
+                  <span>Contá algo de vos</span>
+                  <textarea
+                    value={f.bio}
+                    maxLength={500}
+                    rows={3}
+                    placeholder="Una línea que dé pie a una respuesta: qué te gusta, qué buscás, qué te hace reír…"
+                    onChange={set("bio")}
+                  />
+                </label>
               </>
             )}
 
