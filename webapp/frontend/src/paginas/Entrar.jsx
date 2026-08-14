@@ -38,19 +38,27 @@ export default function Entrar() {
     altura_cm: 170,
     bio: "",
     intereses: [],
+    pais: "",
+    ciudad: "",
+    politica: "neutro",
     generos_busca: [], // vacío = Todos, igual que en Filtros
   });
 
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const pais = catalogos?.paises.find((p) => p.codigo === f.pais);
 
-  // El país NO se pregunta en el alta: se deduce del idioma del teléfono
-  // ("es-UY" → UY) y listo. Junto con ciudad, equipo y política se puede
-  // ajustar después en "Mi perfil" — eran cuatro campos que espantaban en la
-  // pantalla de registro y ninguno hace falta para empezar a deslizar.
-  const paisDetectado = (() => {
+  // El país arranca pre-elegido según el idioma del teléfono ("es-UY" → UY),
+  // pero el selector queda visible para corregirlo. El equipo de fútbol es lo
+  // único que se fue del alta (a pedido): se elige después en "Mi perfil".
+  useEffect(() => {
+    if (!catalogos || f.pais) return;
     const region = (navigator.language || "").split("-")[1]?.toUpperCase() || "";
-    return catalogos?.paises.some((p) => p.codigo === region) ? region : "";
-  })();
+    const elegido =
+      catalogos.paises.find((p) => p.codigo === region) || catalogos.paises[0];
+    if (elegido) {
+      setF((v) => ({ ...v, pais: elegido.codigo, ciudad: elegido.ciudades[0]?.id || "" }));
+    }
+  }, [catalogos, f.pais]);
 
   useEffect(() => {
     api.proveedoresLogin().then((r) => setProveedores(r.proveedores)).catch(() => {});
@@ -98,8 +106,9 @@ export default function Entrar() {
           altura_cm: Number(f.altura_cm),
           bio: f.bio,
           intereses: f.intereses,
-          pais: paisDetectado,
-          ciudad: "",
+          pais: f.pais,
+          ciudad: f.ciudad,
+          politica: f.politica,
           preferencias: { generos: f.generos_busca, edad_min: 18, edad_max: 99 },
         });
       }
@@ -230,9 +239,44 @@ export default function Entrar() {
                     ))}
                   </div>
                 </label>
-                {/* País, ciudad, equipo y política salieron del alta a
-                    pedido: eran los campos que más espantaban en el registro
-                    y ninguno hace falta para empezar. Viven en "Mi perfil". */}
+                <div className="fila">
+                  <label className="campo">
+                    <span>País</span>
+                    <select
+                      value={f.pais}
+                      onChange={(e) => {
+                        const p = catalogos?.paises.find((x) => x.codigo === e.target.value);
+                        setF({ ...f, pais: e.target.value, ciudad: p?.ciudades[0]?.id || "" });
+                      }}
+                    >
+                      {catalogos?.paises.map((p) => (
+                        <option key={p.codigo} value={p.codigo}>
+                          {p.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="campo">
+                    <span>Ciudad</span>
+                    <select value={f.ciudad} onChange={set("ciudad")}>
+                      {pais?.ciudades.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="campo">
+                    <span>Postura política</span>
+                    <select value={f.politica} onChange={set("politica")}>
+                      <option value="izquierda">Izquierda</option>
+                      <option value="derecha">Derecha</option>
+                      <option value="neutro">Neutro</option>
+                    </select>
+                  </label>
+                </div>
+                {/* El equipo de fútbol es lo único que salió del alta, a
+                    pedido. Se elige en "Mi perfil" y el filtro sigue igual. */}
                 <label className="campo">
                   <span>Tus hobbies (marcá los que quieras)</span>
                   <div className="chips">

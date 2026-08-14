@@ -20,12 +20,23 @@ export default function Completar() {
     nacimiento: "1995-01-01",
     genero: "mujer",
     altura_cm: 170,
-    pais: "UY",
-    ciudad: "UY-MVD",
+    pais: "",
+    ciudad: "",
     politica: "neutro",
-    equipo: "",
     generos_busca: [],
   });
+
+  // País pre-elegido según el idioma del teléfono, corregible. El equipo de
+  // fútbol es lo único que salió del alta (a pedido): vive en "Mi perfil".
+  useEffect(() => {
+    if (!catalogos || f.pais) return;
+    const region = (navigator.language || "").split("-")[1]?.toUpperCase() || "";
+    const elegido =
+      catalogos.paises.find((p) => p.codigo === region) || catalogos.paises[0];
+    if (elegido) {
+      setF((v) => ({ ...v, pais: elegido.codigo, ciudad: elegido.ciudades[0]?.id || "" }));
+    }
+  }, [catalogos, f.pais]);
 
   useEffect(() => {
     if (!alta) return;
@@ -55,7 +66,6 @@ export default function Completar() {
         pais: f.pais,
         ciudad: f.ciudad,
         politica: f.politica,
-        equipo: f.equipo,
         preferencias: { generos: f.generos_busca, edad_min: 18, edad_max: 99 },
       });
       guardarToken.guardar(r.token);
@@ -151,7 +161,7 @@ export default function Completar() {
                   value={f.pais}
                   onChange={(e) => {
                     const p = catalogos?.paises.find((x) => x.codigo === e.target.value);
-                    setF({ ...f, pais: e.target.value, ciudad: p?.ciudades[0]?.id || "", equipo: "" });
+                    setF({ ...f, pais: e.target.value, ciudad: p?.ciudades[0]?.id || "" });
                   }}
                 >
                   {catalogos?.paises.map((p) => (
@@ -172,27 +182,14 @@ export default function Completar() {
                 </select>
               </label>
             </div>
-            <div className="fila">
-              <label className="campo">
-                <span>Postura política</span>
-                <select value={f.politica} onChange={set("politica")}>
-                  <option value="izquierda">Izquierda</option>
-                  <option value="derecha">Derecha</option>
-                  <option value="neutro">Neutro</option>
-                </select>
-              </label>
-              <label className="campo">
-                <span>Equipo de {pais?.nombre}</span>
-                <select value={f.equipo} onChange={set("equipo")}>
-                  <option value="">No me interesa el fútbol</option>
-                  {pais?.equipos.map((e) => (
-                    <option key={e} value={e}>
-                      {e}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            <label className="campo">
+              <span>Postura política</span>
+              <select value={f.politica} onChange={set("politica")}>
+                <option value="izquierda">Izquierda</option>
+                <option value="derecha">Derecha</option>
+                <option value="neutro">Neutro</option>
+              </select>
+            </label>
 
             {error && (
               <div className="aviso aviso-error" style={{ marginBottom: 12 }}>
@@ -204,8 +201,8 @@ export default function Completar() {
             </button>
           </form>
           <p style={{ color: "var(--faint)", fontSize: 12, margin: "10px 0 0" }}>
-            Todo esto se cambia después desde tu perfil. La altura y el equipo son los que más
-            usa la gente para filtrar, por eso están acá.
+            Todo esto se cambia después desde tu perfil. Ahí también podés elegir tu equipo de
+            fútbol, tus hobbies y escribir tu descripción.
           </p>
         </div>
       </div>
