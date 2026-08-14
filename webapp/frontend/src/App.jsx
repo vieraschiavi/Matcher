@@ -4,15 +4,18 @@ import { api } from "./api";
 import { useApp } from "./estado";
 import Chat from "./paginas/Chat";
 import Completar from "./paginas/Completar";
+import Cruces from "./paginas/Cruces";
 import Descubrir from "./paginas/Descubrir";
 import Entrar from "./paginas/Entrar";
 import Filtros from "./paginas/Filtros";
 import MiPerfil from "./paginas/MiPerfil";
 import Planes from "./paginas/Planes";
+import Radar from "./paginas/Radar";
 import Ranking from "./paginas/Ranking";
 
 const MENU = [
   { a: "/descubrir", icono: "🔥", texto: "Descubrir" },
+  { a: "/radar", icono: "📍", texto: "Radar" },
   { a: "/matches", icono: "💬", texto: "Matches", globo: "matches" },
   { a: "/likes", icono: "💛", texto: "Te gustaron", globo: "likes" },
   { a: "/ranking", icono: "🏆", texto: "Más votados" },
@@ -159,6 +162,8 @@ export default function App() {
           <Route path="/matches" element={<Chat />} />
           <Route path="/matches/:id" element={<Chat />} />
           <Route path="/likes" element={<Likes />} />
+          <Route path="/radar" element={<Radar />} />
+          <Route path="/cruces" element={<Cruces />} />
           <Route path="/ranking" element={<Ranking />} />
           <Route path="/filtros" element={<Filtros />} />
           <Route path="/perfil" element={<MiPerfil />} />

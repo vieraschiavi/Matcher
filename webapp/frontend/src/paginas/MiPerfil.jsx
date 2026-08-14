@@ -1,12 +1,15 @@
 import { useRef, useState } from "react";
 import { api, duracionVideo, leerArchivo } from "../api";
+import Camara from "../componentes/Camara";
 import { useApp } from "../estado";
+import { INTENCIONES, alternar } from "../vocabulario";
 
 export default function MiPerfil() {
   const { perfil, catalogos, refrescar } = useApp();
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [borrador, setBorrador] = useState(null);
+  const [camara, setCamara] = useState(null); // "foto" | "video" | null
   const inputFoto = useRef(null);
   const inputVideo = useRef(null);
 
@@ -21,6 +24,7 @@ export default function MiPerfil() {
     politica: perfil.politica,
     equipo: perfil.equipo,
     intereses: perfil.intereses,
+    intenciones: perfil.intenciones.filter((i) => i !== "disponible_hoy"),
   };
   const paisSel = catalogos.paises.find((x) => x.codigo === p.pais);
   const set = (k, v) => {
@@ -85,6 +89,31 @@ export default function MiPerfil() {
     await refrescar();
   };
 
+  // Lo que devuelve la cámara ({url, bytes[, segundos]}) es exactamente lo
+  // mismo que produce `leerArchivo` sobre un archivo subido: el resto del
+  // flujo (validar tope, llamar a la API, refrescar) no se bifurca.
+  const fotoDeCamara = async ({ url, bytes }) => {
+    setCamara(null);
+    setError("");
+    try {
+      await api.subirFoto(url, bytes);
+      await refrescar();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const videoDeCamara = async ({ url, bytes, segundos }) => {
+    setCamara(null);
+    setError("");
+    try {
+      await api.subirVideo(url, segundos, bytes);
+      await refrescar();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   const hacerPortada = async (id) => {
     const orden = [id, ...perfil.fotos.filter((f) => f.id !== id).map((f) => f.id)];
     await api.ordenarMedios(orden);
@@ -118,9 +147,15 @@ export default function MiPerfil() {
               </figure>
             ))}
             {libresFoto > 0 && (
-              <figure className="vacio" onClick={() => inputFoto.current.click()}>
-                +
-              </figure>
+              <>
+                <figure className="camara-boton" onClick={() => setCamara("foto")}>
+                  <span>📷</span>
+                  <span>Sacar foto</span>
+                </figure>
+                <figure className="vacio" onClick={() => inputFoto.current.click()}>
+                  +
+                </figure>
+              </>
             )}
           </div>
           <input
@@ -150,9 +185,15 @@ export default function MiPerfil() {
               </figure>
             ))}
             {libresVideo > 0 && (
-              <figure className="vacio" onClick={() => inputVideo.current.click()}>
-                +
-              </figure>
+              <>
+                <figure className="camara-boton" onClick={() => setCamara("video")}>
+                  <span>🎥</span>
+                  <span>Grabar</span>
+                </figure>
+                <figure className="vacio" onClick={() => inputVideo.current.click()}>
+                  +
+                </figure>
+              </>
             )}
           </div>
           <input
@@ -256,6 +297,26 @@ export default function MiPerfil() {
           </label>
         </div>
 
+        <div className="panel">
+          <h3>¿Qué buscás?</h3>
+          <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 0 }}>
+            Se muestra en tu tarjeta. Multi-selección.
+          </p>
+          <div className="chips">
+            {INTENCIONES.filter((i) => i.v !== "disponible_hoy").map((i) => (
+              <button
+                key={i.v}
+                className={`chip ${p.intenciones.includes(i.v) ? "on" : ""}`}
+                onClick={() => set("intenciones", alternar(p.intenciones, i.v))}
+              >
+                {i.icono} {i.t}
+              </button>
+            ))}
+          </div>
+          <hr style={{ border: "none", borderTop: "1px solid var(--line)", margin: "14px 0" }} />
+          <DisponibleHoy perfil={perfil} refrescar={refrescar} />
+        </div>
+
         <div className="panel" style={{ gridColumn: "1 / -1" }}>
           <h3>Intereses</h3>
           <div className="chips">
@@ -297,6 +358,57 @@ export default function MiPerfil() {
       >
         Guardar cambios
       </button>
+
+      {camara && (
+        <Camara
+          modo={camara}
+          segundosMax={catalogos.limites.segundos_video}
+          onListo={camara === "foto" ? fotoDeCamara : videoDeCamara}
+          onCerrar={() => setCamara(null)}
+        />
+      )}
     </>
+  );
+}
+
+// "Disponible hoy" es su propio botón y no un chip más: vence solo a las 24 h
+// y eso lo maneja el servidor (`Perfil.marcar_disponible`), no el borrador de
+// edición que se guarda a mano.
+function DisponibleHoy({ perfil, refrescar }) {
+  const [ocupado, setOcupado] = useState(false);
+  const activo = perfil.disponible_hoy;
+
+  const prender = async () => {
+    setOcupado(true);
+    try {
+      await api.marcarDisponible();
+      await refrescar();
+    } finally {
+      setOcupado(false);
+    }
+  };
+  const apagar = async () => {
+    setOcupado(true);
+    try {
+      await api.apagarDisponible();
+      await refrescar();
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6 }}>
+        <span style={{ fontWeight: 800 }}>⚡ Disponible hoy</span>
+        {activo && <span className="insignia insignia-comp">Activo</span>}
+      </div>
+      <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "0 0 10px" }}>
+        Se apaga solo a las 24 h — no queda prendido para siempre.
+      </p>
+      <button className="btn btn-bloque" disabled={ocupado} onClick={activo ? apagar : prender}>
+        {activo ? "Apagar" : "Activar por 24 h"}
+      </button>
+    </div>
   );
 }

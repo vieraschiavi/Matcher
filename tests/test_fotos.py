@@ -78,18 +78,19 @@ def test_un_perfil_no_mezcla_caras_distintas():
 
 
 def test_la_demo_usa_el_pack_y_lo_reporta():
-    # Población completa: con 30 perfiles y 8% de peso, la semilla puede no
-    # generar ningún perfil no binario y el chequeo de abajo quedaría vacío.
+    # Población completa: con 30 perfiles y 6% de peso cada uno, la semilla
+    # puede no generar ningún perfil trans/otro y el chequeo de abajo quedaría
+    # vacío.
     a = Almacen(":memory:")
     r = demo.poblar(a, cantidad=60)
     assert "personas desde" in r["fuente_de_fotos"]
     perfiles = [p for p in a.todos() if p.sintetico]
     assert all(p.portada.startswith("data:image/jpeg") for p in perfiles)
-    # Incluidos los no binarios, que no tienen carpeta propia: si caen al
+    # Incluidos trans y otro, que no tienen carpeta propia: si caen al
     # retrato ilustrado se los distingue de un vistazo entre puras fotos.
-    nb = [p for p in perfiles if p.genero == "no_binario"]
-    assert nb, "la demo tiene que generar algún perfil no binario"
-    assert all(p.portada.startswith("data:image/jpeg") for p in nb)
+    sin_carpeta = [p for p in perfiles if p.genero in ("trans", "otro")]
+    assert sin_carpeta, "la demo tiene que generar algún perfil trans/otro"
+    assert all(p.portada.startswith("data:image/jpeg") for p in sin_carpeta)
     a.cerrar()
 
 
@@ -97,7 +98,7 @@ def test_no_se_repite_una_cara_entre_generos():
     f = fotos.Fuente()
     portadas = [
         f.para(f"p{i}", "X", g, 1)[0]
-        for i, g in enumerate(["mujer", "no_binario", "hombre"] * 8)
+        for i, g in enumerate(["mujer", "trans", "otro", "hombre"] * 8)
     ]
     assert len(set(portadas)) == len(portadas)
 

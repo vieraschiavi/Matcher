@@ -60,6 +60,8 @@ export const api = {
   logout: () => pedir("/logout", { metodo: "POST" }),
   yo: () => pedir("/yo"),
   editar: (cambio) => pedir("/yo", { metodo: "PATCH", cuerpo: cambio }),
+  marcarDisponible: () => pedir("/yo/disponible", { metodo: "POST" }),
+  apagarDisponible: () => pedir("/yo/disponible", { metodo: "DELETE" }),
 
   subirFoto: (url, bytes) => pedir("/yo/fotos", { metodo: "POST", cuerpo: { url, bytes } }),
   subirVideo: (url, segundos, bytes) =>
@@ -68,6 +70,9 @@ export const api = {
   ordenarMedios: (ids) => pedir("/yo/medios/orden", { metodo: "POST", cuerpo: { ids } }),
 
   deck: (limite = 20) => pedir(`/deck?limite=${limite}`),
+  radar: (radio_km) => pedir(`/radar?radio_km=${radio_km}`),
+  ubicacion: (lat, lon) => pedir("/ubicacion", { metodo: "POST", cuerpo: { lat, lon } }),
+  cruces: () => pedir("/cruces"),
   interactuar: (a_id, tipo) => pedir("/interacciones", { metodo: "POST", cuerpo: { a_id, tipo } }),
   rebobinar: () => pedir("/rebobinar", { metodo: "POST" }),
   likesRecibidos: () => pedir("/likes-recibidos"),

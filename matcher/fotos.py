@@ -30,7 +30,7 @@ from . import avatares
 
 EXTENSIONES = (".jpg", ".jpeg", ".png", ".webp")
 VARIABLE = "MATCHER_FOTOS"
-GENEROS_CARPETA = ("mujer", "hombre", "no_binario")
+GENEROS_CARPETA = ("mujer", "hombre", "otro")
 PACK_INCLUIDO = Path(__file__).resolve().parent.parent / "assets" / "personas"
 
 
@@ -109,7 +109,7 @@ class Fuente:
         """Personas candidatas para ese género.
 
         Si no hay carpeta propia para el género, se usa el pool completo en
-        vez de caer a los retratos ilustrados. Importa para `no_binario`: con
+        vez de caer a los retratos ilustrados. Importa para `otro`: con
         el fallback anterior esos perfiles salían dibujados en medio de una
         demo de fotos y se los distinguía de un vistazo, que es justo lo que
         no tiene que pasar.

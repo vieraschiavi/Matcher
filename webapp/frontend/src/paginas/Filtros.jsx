@@ -1,17 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import RangoDoble from "../componentes/RangoDoble";
 import { useApp } from "../estado";
-
-const POLITICAS = [
-  { v: "izquierda", t: "Izquierda" },
-  { v: "derecha", t: "Derecha" },
-  { v: "neutro", t: "Neutro" },
-];
-
-// Alterna un valor dentro de una lista. Lista vacía = "cualquiera", que es
-// distinto de "ninguno": si el usuario destilda todo, el filtro se apaga.
-const alternar = (lista, v) =>
-  lista.includes(v) ? lista.filter((x) => x !== v) : [...lista, v];
+import { GENEROS, INTENCIONES, POLITICAS, alternar } from "../vocabulario";
 
 export default function Filtros() {
   const { perfil, catalogos, refrescar } = useApp();
@@ -24,10 +15,14 @@ export default function Filtros() {
 
   if (!p || !catalogos) return <p className="page-sub">Cargando…</p>;
 
-  // Los equipos que se ofrecen son los del país del usuario. Es el punto del
-  // filtro: un uruguayo elige entre equipos uruguayos, un mexicano entre
-  // mexicanos. Cablear un país acá rompe el producto para todos los demás.
+  // Los equipos se ofrecen del país del usuario, y la unidad de distancia
+  // (km o millas) también sale de ahí: un uruguayo elige entre equipos
+  // uruguayos y ve km; alguien en EE.UU./Reino Unido ve millas.
   const miPais = catalogos.paises.find((x) => x.codigo === perfil.pais);
+  const unidad = miPais?.unidad === "mi" ? "mi" : "km";
+  const AMILLA = 0.621371;
+  const aVisible = (km) => (unidad === "mi" ? Math.round(km * AMILLA) : Math.round(km));
+  const aKm = (v) => (unidad === "mi" ? Math.round(v / AMILLA) : v);
 
   const set = (k, v) => {
     setP({ ...p, [k]: v });
@@ -47,6 +42,8 @@ export default function Filtros() {
     }
   };
 
+  const distanciaMax = p.distancia_max_km ?? 200;
+
   return (
     <>
       <h1 className="page-title">Filtros</h1>
@@ -57,82 +54,96 @@ export default function Filtros() {
 
       <div className="grid grid-2">
         <div className="panel">
-          <h3>Quién</h3>
-          <label className="campo">
-            <span>Buscás</span>
-            <select value={p.busca} onChange={(e) => set("busca", e.target.value)}>
-              <option value="mujeres">Mujeres</option>
-              <option value="hombres">Hombres</option>
-              <option value="todos">Todos</option>
-            </select>
-          </label>
-          <div className="fila">
-            <label className="campo">
-              <span>Edad mínima</span>
-              <input
-                type="number"
-                min={18}
-                max={99}
-                value={p.edad_min}
-                onChange={(e) => set("edad_min", Number(e.target.value))}
-              />
-            </label>
-            <label className="campo">
-              <span>Edad máxima</span>
-              <input
-                type="number"
-                min={18}
-                max={99}
-                value={p.edad_max}
-                onChange={(e) => set("edad_max", Number(e.target.value))}
-              />
-            </label>
-          </div>
-          <div className="fila">
-            <label className="campo">
-              <span>Altura mín. (cm)</span>
-              <input
-                type="number"
-                min={130}
-                max={230}
-                placeholder="sin mínimo"
-                value={p.altura_min_cm ?? ""}
-                onChange={(e) =>
-                  set("altura_min_cm", e.target.value === "" ? null : Number(e.target.value))
-                }
-              />
-            </label>
-            <label className="campo">
-              <span>Altura máx. (cm)</span>
-              <input
-                type="number"
-                min={130}
-                max={230}
-                placeholder="sin máximo"
-                value={p.altura_max_cm ?? ""}
-                onChange={(e) =>
-                  set("altura_max_cm", e.target.value === "" ? null : Number(e.target.value))
-                }
-              />
-            </label>
+          <h3>Sexo</h3>
+          <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 0 }}>
+            Podés elegir varios. Sin nada marcado, aparecen todos.
+          </p>
+          <div className="chips">
+            {GENEROS.map((g) => (
+              <button
+                key={g.v}
+                className={`chip ${p.generos.includes(g.v) ? "on" : ""}`}
+                onClick={() => set("generos", alternar(p.generos, g.v))}
+              >
+                {g.t}
+              </button>
+            ))}
           </div>
         </div>
 
         <div className="panel">
-          <h3>Dónde</h3>
-          <label className="campo">
-            <span>Radio máximo (km)</span>
+          <h3>¿Qué buscás?</h3>
+          <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 0 }}>
+            Multi-selección. Alcanza con que coincida una para aparecer en el deck del otro.
+          </p>
+          <div className="chips">
+            {INTENCIONES.filter((i) => i.v !== "disponible_hoy").map((i) => (
+              <button
+                key={i.v}
+                className={`chip ${p.intenciones.includes(i.v) ? "on" : ""}`}
+                onClick={() => set("intenciones", alternar(p.intenciones, i.v))}
+              >
+                {i.icono} {i.t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          <h3>Edad</h3>
+          <RangoDoble
+            min={18}
+            max={99}
+            valorMin={p.edad_min}
+            valorMax={p.edad_max}
+            unidad=""
+            onCambiar={(min, max) => setP({ ...p, edad_min: min, edad_max: max })}
+          />
+        </div>
+
+        <div className="panel">
+          <h3>Altura</h3>
+          <RangoDoble
+            min={130}
+            max={230}
+            valorMin={p.altura_min_cm ?? 130}
+            valorMax={p.altura_max_cm ?? 230}
+            unidad=" cm"
+            onCambiar={(min, max) =>
+              setP({
+                ...p,
+                altura_min_cm: min === 130 ? null : min,
+                altura_max_cm: max === 230 ? null : max,
+              })
+            }
+          />
+          <p style={{ color: "var(--faint)", fontSize: 12, margin: 0 }}>
+            En los extremos, sin límite.
+          </p>
+        </div>
+
+        <div className="panel">
+          <h3>Distancia</h3>
+          <div className="rango-doble">
+            <div className="rango-doble-valores">
+              <span>0 {unidad}</span>
+              <span>
+                {p.distancia_max_km == null ? "sin límite" : `${aVisible(distanciaMax)} ${unidad}`}
+              </span>
+            </div>
             <input
-              type="number"
-              min={1}
-              placeholder="sin límite"
-              value={p.distancia_max_km ?? ""}
-              onChange={(e) =>
-                set("distancia_max_km", e.target.value === "" ? null : Number(e.target.value))
-              }
+              type="range"
+              min={0}
+              max={aVisible(200)}
+              value={p.distancia_max_km == null ? aVisible(200) : aVisible(distanciaMax)}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                set("distancia_max_km", v >= aVisible(200) ? null : aKm(v));
+              }}
+              style={{ width: "100%" }}
             />
-          </label>
-          <label style={{ display: "flex", gap: 9, alignItems: "center", marginBottom: 11 }}>
+          </div>
+          <label style={{ display: "flex", gap: 9, alignItems: "center", marginTop: 9, marginBottom: 11 }}>
             <input
               type="checkbox"
               style={{ width: "auto" }}
@@ -150,10 +161,6 @@ export default function Filtros() {
             />
             <span>Sólo perfiles verificados</span>
           </label>
-          <p style={{ color: "var(--faint)", fontSize: 12, marginBottom: 0 }}>
-            El deck ordena por cercanía antes que por puntaje: nadie de otro país se cuela delante
-            de alguien de tu ciudad.
-          </p>
         </div>
 
         <div className="panel">

@@ -85,7 +85,7 @@ def test_actividad_cae_con_el_tiempo(hacer_perfil):
 def test_la_ola_manda_antes_que_el_puntaje(hacer_perfil):
     """Regresión que se paga cara: alguien de otro continente colándose
     delante de alguien de tu ciudad porque tiene mejor score."""
-    yo = hacer_perfil(pais="UY", ciudad="UY-MVD", preferencias=Preferencias(busca="todos"))
+    yo = hacer_perfil(pais="UY", ciudad="UY-MVD", preferencias=Preferencias(generos=[]))
     vecina = hacer_perfil(
         pais="UY", ciudad="UY-MVD", nombre="Vecina", politica="derecha", intereses=[]
     )

@@ -176,6 +176,80 @@ CIUDADES: dict[str, tuple[str, float, float]] = {
 }
 
 
+# Peso relativo por tamaño del área metropolitana. Sirve para repartir la
+# población de la demo: sorteando las ciudades por igual, Canelones terminaba
+# con más gente que Montevideo y el radar quedaba casi vacío en la capital,
+# que es justo donde hay que poder mostrarlo. Son órdenes de magnitud, no
+# censos.
+PESO_CIUDAD: dict[str, int] = {
+    "UY-MVD": 10, "UY-CAN": 2, "UY-MAL": 1, "UY-SAL": 1,
+    "AR-BUE": 15, "AR-COR": 3, "AR-ROS": 3, "AR-MDZ": 2,
+    "CL-SCL": 10, "CL-VAP": 2,
+    "PY-ASU": 6,
+    "BR-SAO": 20, "BR-RIO": 12, "BR-POA": 4, "BR-BSB": 5,
+    "PE-LIM": 10,
+    "BO-LPB": 4,
+    "EC-UIO": 4, "EC-GYE": 4,
+    "CO-BOG": 10, "CO-MDE": 4,
+    "VE-CCS": 6,
+    "MX-MEX": 20, "MX-GDL": 6, "MX-MTY": 5,
+    "US-NYC": 18, "US-MIA": 6, "US-LAX": 12,
+    "CA-YTO": 6,
+    "ES-MAD": 8, "ES-BCN": 6,
+    "PT-LIS": 3,
+    "IT-ROM": 4, "IT-MIL": 4,
+    "FR-PAR": 10,
+    "GB-LON": 12,
+    "DE-BER": 5,
+    "NL-AMS": 3,
+}
+
+
+def peso_ciudad(id_ciudad: str) -> int:
+    return PESO_CIUDAD.get(id_ciudad, 1)
+
+
+# ---------------------------------------------------------------------------
+# Unidades e idioma, por país de localización
+# ---------------------------------------------------------------------------
+# Las distancias se guardan y se calculan SIEMPRE en km. Esto es sólo para
+# mostrar: un estadounidense espera millas y un uruguayo espera km, y mostrar
+# la unidad equivocada hace que el filtro de distancia se sienta roto.
+PAISES_EN_MILLAS = frozenset({"US", "GB"})
+KM_POR_MILLA = 1.609344
+
+
+def unidad_de(codigo_pais: str) -> str:
+    return "mi" if codigo_pais in PAISES_EN_MILLAS else "km"
+
+
+def a_unidad(km: float, codigo_pais: str) -> float:
+    return round(km / KM_POR_MILLA, 1) if unidad_de(codigo_pais) == "mi" else round(km, 1)
+
+
+def desde_unidad(valor: float, codigo_pais: str) -> float:
+    """Convierte lo que eligió el usuario a km, que es lo único que se guarda."""
+    return round(valor * KM_POR_MILLA, 3) if unidad_de(codigo_pais) == "mi" else float(valor)
+
+
+# Idioma por país. La app arranca en el idioma del país donde está la persona
+# y se puede cambiar a mano. Sólo hay tres traducciones completas: cualquier
+# país que no esté acá cae en inglés, que es el default menos malo.
+IDIOMA_POR_PAIS: dict[str, str] = {
+    "UY": "es", "AR": "es", "CL": "es", "PY": "es", "PE": "es", "BO": "es",
+    "EC": "es", "CO": "es", "VE": "es", "MX": "es", "ES": "es",
+    "BR": "pt", "PT": "pt",
+    "US": "en", "CA": "en", "GB": "en", "IT": "en", "FR": "en", "DE": "en",
+    "NL": "en",
+}
+IDIOMAS = ("es", "pt", "en")
+IDIOMA_POR_DEFECTO = "en"
+
+
+def idioma_de(codigo_pais: str) -> str:
+    return IDIOMA_POR_PAIS.get(codigo_pais, IDIOMA_POR_DEFECTO)
+
+
 def ciudades_de(codigo_pais: str) -> list[dict]:
     """Ciudades del catálogo que pertenecen a un país."""
     salida = []
@@ -212,6 +286,70 @@ def distancia_km(a: tuple[float, float], b: tuple[float, float]) -> float:
     return round(2 * radio * math.asin(math.sqrt(h)), 1)
 
 
+# ---------------------------------------------------------------------------
+# Celdas: la unidad de ubicación que sale del servidor
+# ---------------------------------------------------------------------------
+# Nadie ve la posición exacta de otra persona, nunca. Todo lo que viaja al
+# cliente pasa antes por `celda()`, que redondea a una grilla. Con la posición
+# exacta —aunque sea una sola vez— se triangula dónde vive alguien, y ese es el
+# incidente que hunde una app de citas.
+#
+# 500 m para mostrar (el punto cae en tu barrio, no en tu puerta) y 250 m para
+# detectar cruces (más chico, porque ahí lo que importa es que de verdad se
+# hayan cruzado y ese dato no se muestra en un mapa).
+PRECISION_MAPA_M = 500
+PRECISION_CRUCE_M = 250
+
+_METROS_POR_GRADO_LAT = 111_320.0
+
+
+def _grados(metros: float, lat: float) -> tuple[float, float]:
+    """Tamaño de celda en grados. El ancho en longitud depende de la latitud:
+    a 60° un grado de longitud mide la mitad que en el ecuador."""
+    d_lat = metros / _METROS_POR_GRADO_LAT
+    coseno = max(math.cos(math.radians(lat)), 0.01)  # evita el polo
+    d_lon = metros / (_METROS_POR_GRADO_LAT * coseno)
+    return d_lat, d_lon
+
+
+def celda(lat: float, lon: float, metros: int = PRECISION_MAPA_M) -> tuple[int, int]:
+    """Índices de la celda de la grilla. Determinista y estable: la misma
+    posición cae siempre en la misma celda, así el punto no tiembla en el mapa
+    entre dos consultas."""
+    d_lat, d_lon = _grados(metros, lat)
+    return (math.floor(lat / d_lat), math.floor(lon / d_lon))
+
+
+def centro_de_celda(indices: tuple[int, int], metros: int = PRECISION_MAPA_M) -> tuple[float, float]:
+    """Centro de la celda. Es la ÚNICA coordenada que se le manda al cliente
+    para ubicar a otra persona."""
+    i, j = indices
+    d_lat = metros / _METROS_POR_GRADO_LAT
+    lat = (i + 0.5) * d_lat
+    _, d_lon = _grados(metros, lat)
+    return (round(lat, 5), round((j + 0.5) * d_lon, 5))
+
+
+def aproximar(lat: float, lon: float, metros: int = PRECISION_MAPA_M) -> tuple[float, float]:
+    """Atajo: coordenada redondeada a la celda."""
+    return centro_de_celda(celda(lat, lon, metros), metros)
+
+
+def clave_celda(lat: float, lon: float, metros: int = PRECISION_CRUCE_M) -> str:
+    i, j = celda(lat, lon, metros)
+    return f"{metros}:{i}:{j}"
+
+
+def rumbo(desde: tuple[float, float], hasta: tuple[float, float]) -> float:
+    """Rumbo en grados desde el norte (0 = norte, 90 = este). Lo usa el radar
+    para ubicar el punto alrededor tuyo."""
+    lat1, lat2 = math.radians(desde[0]), math.radians(hasta[0])
+    dlon = math.radians(hasta[1] - desde[1])
+    y = math.sin(dlon) * math.cos(lat2)
+    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    return round((math.degrees(math.atan2(y, x)) + 360) % 360, 1)
+
+
 def ola_entre(pais_a: str, ciudad_a: str, pais_b: str, ciudad_b: str) -> str:
     """En qué ola cae B respecto de A. El orden es ciudad → país → región → mundo."""
     if pais_a == pais_b and ciudad_a and ciudad_a == ciudad_b:
@@ -240,6 +378,8 @@ def paises_ordenados() -> list[dict]:
                 "region": p.region,
                 "equipos": list(p.equipos),
                 "ciudades": ciudades_de(p.codigo),
+                "unidad": unidad_de(p.codigo),
+                "idioma": idioma_de(p.codigo),
             }
             for p in CATALOGO.values()
         ),

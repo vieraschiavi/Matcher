@@ -11,6 +11,7 @@ en producción no hay CORS ni segundo servidor: una app, un puerto.
 
 from __future__ import annotations
 
+import json
 import os
 import urllib.parse
 from datetime import date
@@ -22,7 +23,19 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from matcher import automatch, demo, geo, medios, oauth, pagos, planes, scoring, seguridad
+from matcher import (
+    automatch,
+    cruces,
+    demo,
+    geo,
+    medios,
+    oauth,
+    pagos,
+    planes,
+    radar,
+    scoring,
+    seguridad,
+)
 from matcher.almacen import Almacen, SinCupo
 from matcher.modelos import (
     GENEROS,
@@ -107,13 +120,15 @@ async def _sin_cupo(_: Request, exc: SinCupo):
 # Esquemas de entrada
 # ---------------------------------------------------------------------------
 class AltaPreferencias(BaseModel):
-    busca: str = "todos"
+    generos: list[str] = Field(default_factory=list)
+    busca: str | None = None  # legado: un cliente viejo puede seguir mandándolo
     edad_min: int = 18
     edad_max: int = 99
     altura_min_cm: int | None = None
     altura_max_cm: int | None = None
     politicas: list[str] = Field(default_factory=list)
     equipos: list[str] = Field(default_factory=list)
+    intenciones: list[str] = Field(default_factory=list)
     solo_mi_pais: bool = False
     distancia_max_km: int | None = None
     solo_verificados: bool = False
@@ -167,6 +182,7 @@ class CambioPerfil(BaseModel):
     equipo: str | None = None
     bio: str | None = None
     intereses: list[str] | None = None
+    intenciones: list[str] | None = None
     preferencias: AltaPreferencias | None = None
 
 
@@ -203,6 +219,11 @@ class AltaReporte(BaseModel):
     a_id: str
     motivo: str
     detalle: str = ""
+
+
+class Ubicacion(BaseModel):
+    lat: float
+    lon: float
 
 
 # ---------------------------------------------------------------------------
@@ -431,10 +452,30 @@ def editar(cambio: CambioPerfil, perfil: Perfil = Depends(usuario)):
             setattr(perfil, campo, valor)
     if cambio.intereses is not None:
         perfil.intereses = cambio.intereses
+    if cambio.intenciones is not None:
+        # "disponible_hoy" no se toca desde acá: tiene su propio endpoint
+        # porque lleva un vencimiento, no es un valor que se guarda y listo.
+        perfil.intenciones = [i for i in cambio.intenciones if i != "disponible_hoy"]
     if cambio.preferencias is not None:
         perfil.preferencias = Preferencias.desde_dict(cambio.preferencias.model_dump())
     almacen().guardar_perfil(perfil)
     return {"perfil": perfil.a_dict(privado=True)}
+
+
+@app.post("/api/yo/disponible")
+def marcar_disponible(perfil: Perfil = Depends(usuario)):
+    """Prende "disponible hoy" por 24 h. Vence solo: sin vencimiento, a la
+    semana medio padrón figuraría disponible y el filtro no diría nada."""
+    perfil.marcar_disponible()
+    almacen().guardar_perfil(perfil)
+    return {"disponible_hasta": perfil.disponible_hasta.isoformat()}
+
+
+@app.delete("/api/yo/disponible")
+def apagar_disponible(perfil: Perfil = Depends(usuario)):
+    perfil.disponible_hasta = None
+    almacen().guardar_perfil(perfil)
+    return {"ok": True}
 
 
 @app.delete("/api/yo")
@@ -503,6 +544,34 @@ def rebobinar(perfil: Perfil = Depends(usuario)):
 @app.get("/api/likes-recibidos")
 def likes_recibidos(perfil: Perfil = Depends(usuario)):
     return almacen().quien_me_dio_like(perfil)
+
+
+# ---------------------------------------------------------------------------
+# Radar, ubicación y cruces
+# ---------------------------------------------------------------------------
+@app.post("/api/ubicacion")
+def actualizar_ubicacion(datos: Ubicacion, perfil: Perfil = Depends(usuario)):
+    """Ping de ubicación. Devuelve los cruces nuevos que detectó.
+
+    Lo que se guarda es la CELDA, no la coordenada: el cliente manda precisión
+    de GPS y el servidor la tira a propósito.
+    """
+    if not (-90 <= datos.lat <= 90 and -180 <= datos.lon <= 180):
+        raise DatosInvalidos("coordenadas fuera de rango")
+    return cruces.registrar_ping(almacen(), perfil, datos.lat, datos.lon)
+
+
+@app.get("/api/radar")
+def ver_radar(radio_km: float = radar.RADIO_DEFECTO_KM, perfil: Perfil = Depends(usuario)):
+    a = almacen()
+    a.tocar(perfil.id)
+    return radar.alrededor(a, perfil, radio_km=radio_km)
+
+
+@app.get("/api/cruces")
+def mis_cruces(perfil: Perfil = Depends(usuario)):
+    a = almacen()
+    return {"resumen": cruces.resumen(a, perfil), "personas": cruces.de(a, perfil)}
 
 
 @app.get("/api/ranking")
@@ -591,6 +660,72 @@ def cancelar_plan(perfil: Perfil = Depends(usuario)):
 @app.get("/api/pagos")
 def historial_pagos(perfil: Perfil = Depends(usuario)):
     return {"pagos": almacen().pagos_de(perfil.id)}
+
+
+@app.get("/api/pagos/planes-disponibles")
+def pasarelas_disponibles():
+    """Qué pasarela está activa y si sus credenciales están completas. Sirve
+    para que la UI de Planes le avise al usuario ANTES de que llegue al
+    checkout, en vez de fallar recién al tocar "Pagar"."""
+    nombre = os.getenv("MATCHER_PASARELA", "demo")
+    try:
+        pagos.pasarela_activa()
+        lista = True
+    except DatosInvalidos:
+        lista = False
+    return {"pasarela": nombre, "configurada": lista}
+
+
+async def _webhook(request: Request, nombre_pasarela: str) -> JSONResponse:
+    """Cuerpo común a los tres webhooks: verificar la firma ANTES de tocar
+    nada. Un webhook sin verificar es que cualquiera en internet pueda
+    activarte un plan gratis mandando el POST a mano."""
+    cuerpo = await request.body()
+    pasarela = pagos.pasarela_por_nombre(nombre_pasarela)
+    if not pasarela.verificar_webhook(cuerpo, dict(request.headers)):
+        raise HTTPException(400, "firma inválida")
+
+    try:
+        datos = json.loads(cuerpo or b"{}")
+    except json.JSONDecodeError:
+        raise HTTPException(400, "cuerpo inválido") from None
+
+    # Cada proveedor manda "cuál es mi pago" en un lugar distinto del cuerpo.
+    referencia = (
+        datos.get("external_reference")  # MercadoPago (cuando viene en el payload)
+        or datos.get("order_id")  # dLocal
+        or next(
+            (
+                u.get("reference_id")
+                for u in datos.get("resource", {}).get("purchase_units", [])  # PayPal
+            ),
+            None,
+        )
+    )
+    if not referencia:
+        # No es un error del cliente: es un evento que este webhook no sabe
+        # interpretar (p.ej. una notificación de MercadoPago que sólo trae el
+        # id de pago y hay que ir a buscarlo a la API). Se responde 200 para
+        # que el proveedor no reintente indefinidamente, y no se confirma nada.
+        return JSONResponse({"ok": True, "procesado": False})
+
+    resultado = pagos.confirmar_por_referencia(almacen(), referencia)
+    return JSONResponse({"ok": True, "procesado": True, "resultado": resultado})
+
+
+@app.post("/api/pagos/webhook/mercadopago")
+async def webhook_mercadopago(request: Request):
+    return await _webhook(request, "mercadopago")
+
+
+@app.post("/api/pagos/webhook/paypal")
+async def webhook_paypal(request: Request):
+    return await _webhook(request, "paypal")
+
+
+@app.post("/api/pagos/webhook/dlocal")
+async def webhook_dlocal(request: Request):
+    return await _webhook(request, "dlocal")
 
 
 # ---------------------------------------------------------------------------

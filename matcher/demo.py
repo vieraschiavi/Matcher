@@ -23,7 +23,7 @@ from datetime import date, datetime, timedelta
 
 from . import fotos, geo, medios
 from .almacen import Almacen
-from .modelos import Perfil, Preferencias
+from .modelos import INTENCIONES, Perfil, Preferencias
 
 SEMILLA = 20260814
 
@@ -52,7 +52,11 @@ NOMBRES_M = [
     "Ramiro", "Esteban", "Hernán", "Guillermo", "Matías", "Damián", "Ezequiel",
     "Alejandro", "Cristian", "Iván", "Benicio", "Thiago", "Lautaro", "Simón",
 ]
-NOMBRES_NB = ["Alex", "Sasha", "Renzo", "Noa", "Ariel", "Cris", "Val", "Andy", "Tai", "Robin"]
+# "trans" no distingue mujer/hombre trans en el modelo (es una sola categoría,
+# como pidió el producto), así que toma nombre del pool combinado. "otro" tiene
+# el suyo.
+NOMBRES_TRANS = NOMBRES_F + NOMBRES_M
+NOMBRES_OTRO = ["Alex", "Sasha", "Renzo", "Noa", "Ariel", "Cris", "Val", "Andy", "Tai", "Robin"]
 
 INTERESES = [
     "asado", "fútbol", "básquetbol", "running", "yoga", "escalada", "surf",
@@ -95,16 +99,25 @@ def _fecha_nacimiento(rnd: random.Random, edad: int) -> date:
 def _perfil_sintetico(rnd: random.Random, i: int, fuente: fotos.Fuente) -> Perfil:
     pais = rnd.choices(list(PESOS_PAIS), weights=list(PESOS_PAIS.values()))[0]
     ciudades = geo.ciudades_de(pais)
-    ciudad = rnd.choice(ciudades)["id"] if ciudades else ""
-    genero = rnd.choices(["mujer", "hombre", "no_binario"], weights=[46, 46, 8])[0]
+    # Ponderado por tamaño de la ciudad: sorteando parejo, Canelones terminaba
+    # con más gente que Montevideo y el radar quedaba vacío en la capital.
+    ciudad = (
+        rnd.choices(ciudades, weights=[geo.peso_ciudad(c["id"]) for c in ciudades])[0]["id"]
+        if ciudades
+        else ""
+    )
+    genero = rnd.choices(["mujer", "hombre", "trans", "otro"], weights=[44, 44, 6, 6])[0]
     nombre = rnd.choice(
-        {"mujer": NOMBRES_F, "hombre": NOMBRES_M, "no_binario": NOMBRES_NB}[genero]
+        {"mujer": NOMBRES_F, "hombre": NOMBRES_M, "trans": NOMBRES_TRANS, "otro": NOMBRES_OTRO}[
+            genero
+        ]
     )
     edad = rnd.randint(19, 55)
     altura = {
         "mujer": rnd.randint(150, 182),
         "hombre": rnd.randint(162, 197),
-        "no_binario": rnd.randint(155, 190),
+        "trans": rnd.randint(152, 192),
+        "otro": rnd.randint(155, 190),
     }[genero]
     equipos = geo.equipos_de(pais)
     equipo = rnd.choice(equipos) if equipos and rnd.random() < 0.72 else ""
@@ -123,8 +136,18 @@ def _perfil_sintetico(rnd: random.Random, i: int, fuente: fotos.Fuente) -> Perfi
         equipo=equipo,
         bio=rnd.choice(BIOS),
         intereses=rnd.sample(INTERESES, rnd.randint(4, 8)),
+        # Lo que busca esta persona (distinto de lo que filtra en los demás).
+        intenciones=rnd.sample(
+            [i for i in INTENCIONES if i != "disponible_hoy"], rnd.randint(1, 3)
+        ),
         preferencias=Preferencias(
-            busca=rnd.choices(["mujeres", "hombres", "todos"], weights=[38, 38, 24])[0],
+            generos=rnd.choices(
+                [["mujer"], ["hombre"], [], ["mujer", "trans", "otro"], ["hombre", "trans", "otro"]],
+                weights=[34, 34, 20, 6, 6],
+            )[0],
+            intenciones=rnd.sample(
+                [i for i in INTENCIONES if i != "disponible_hoy"], rnd.randint(1, 3)
+            ),
             edad_min=max(18, edad - rnd.randint(4, 12)),
             edad_max=min(99, edad + rnd.randint(4, 14)),
             solo_mi_pais=rnd.random() < 0.35,
@@ -144,6 +167,10 @@ def _perfil_sintetico(rnd: random.Random, i: int, fuente: fotos.Fuente) -> Perfi
     tasa = rnd.triangular(0.02, 0.45, 0.11)
     p.likes_recibidos = int(p.vistas_recibidas * tasa)
     p.superfans_recibidos = int(p.likes_recibidos * rnd.uniform(0.0, 0.06))
+    # Un tercio marcado como disponible hoy, para que el filtro tenga a quién
+    # devolver en la demo.
+    if rnd.random() < 0.33:
+        p.marcar_disponible(rnd.randint(2, 20))
     if p.plan != "gratis":
         p.plan_vence = datetime.utcnow() + timedelta(days=rnd.randint(3, 300))
     for url in fuente.para(p.id, nombre, genero, rnd.randint(2, 5)):
@@ -155,7 +182,7 @@ def _cuenta_demo(
     email: str,
     nombre: str,
     genero: str,
-    busca: str,
+    generos: list[str],
     edad: int,
     altura: int,
     equipo: str,
@@ -181,7 +208,7 @@ def _cuenta_demo(
         bio=bio,
         intereses=intereses,
         preferencias=Preferencias(
-            busca=busca,
+            generos=generos,
             edad_min=18,
             edad_max=99,
             solo_mi_pais=False,
@@ -204,6 +231,46 @@ def _cuenta_demo(
     return p
 
 
+def _sembrar_ubicaciones_y_cruces(almacen: Almacen, rnd: random.Random) -> None:
+    """Reparte a la gente alrededor del centro de su ciudad y arma cruces con
+    las cuentas demo.
+
+    La dispersión es de hasta ~12 km: con todos en el centro exacto, el radar
+    muestra 40 puntos apilados y no se entiende nada. Todo lo que se guarda ya
+    pasa por `geo.aproximar`, igual que en el flujo real.
+    """
+    ahora = datetime.utcnow()
+    perfiles = almacen.todos()
+    for p in perfiles:
+        centro = geo.coordenadas(p.ciudad)
+        if not centro:
+            continue
+        # Desplazamiento en grados: ~0.11 grados de latitud son ~12 km.
+        d_lat = rnd.uniform(-0.11, 0.11)
+        d_lon = rnd.uniform(-0.11, 0.11)
+        lat, lon = geo.aproximar(centro[0] + d_lat, centro[1] + d_lon)
+        almacen.guardar_ubicacion(
+            p.id, lat, lon, ahora - timedelta(minutes=rnd.randint(0, 60 * 20))
+        )
+
+    cercanos = [
+        p for p in perfiles if p.sintetico and p.ciudad == "UY-MVD" and p.activo and p.completo
+    ]
+    for email in CUENTAS_DEMO:
+        cuenta = almacen.buscar_por_email(email)
+        if not cuenta or not cercanos:
+            continue
+        for otro in rnd.sample(cercanos, min(9, len(cercanos))):
+            if otro.id == cuenta.id:
+                continue
+            veces = rnd.choices([1, 2, 3, 5, 8], weights=[40, 26, 18, 10, 6])[0]
+            ultima = ahora - timedelta(hours=rnd.randint(1, 24 * 9))
+            primera = ultima - timedelta(days=rnd.randint(1, 40))
+            pos = almacen.ubicacion_de(otro.id)
+            celda = geo.clave_celda(pos["lat"], pos["lon"]) if pos else ""
+            almacen.sumar_cruce(cuenta.id, otro.id, veces, primera, ultima, celda)
+
+
 def poblar(almacen: Almacen, *, cantidad: int = 60, clave: str | None = None) -> dict:
     """Deja la base lista para la demo. Idempotente: si las cuentas ya existen,
     no las duplica ni les pisa el plan."""
@@ -217,7 +284,7 @@ def poblar(almacen: Almacen, *, cantidad: int = 60, clave: str | None = None) ->
             "email": "vieraschiavi@gmail.com",
             "nombre": "Martín",
             "genero": "hombre",
-            "busca": "todos",
+            "generos": [],
             "edad": 38,
             "altura": 180,
             "equipo": "Peñarol",
@@ -228,8 +295,8 @@ def poblar(almacen: Almacen, *, cantidad: int = 60, clave: str | None = None) ->
         {
             "email": "arcortito@gmail.com",
             "nombre": "Ariel",
-            "genero": "no_binario",
-            "busca": "todos",
+            "genero": "otro",
+            "generos": [],
             "edad": 34,
             "altura": 172,
             "equipo": "Nacional",
@@ -269,6 +336,10 @@ def poblar(almacen: Almacen, *, cantidad: int = 60, clave: str | None = None) ->
                     ["like", "superfan"], weights=[80, 20])[0])
             except Exception:  # noqa: BLE001 — cupo agotado o ya existía; es demo
                 continue
+
+    # Ubicaciones y cruces. Sin esto el radar arranca vacío y el contador de
+    # cruces en cero, que es justo lo que hay que poder mostrar en la demo.
+    _sembrar_ubicaciones_y_cruces(almacen, rnd)
 
     return {
         "creados": creados,

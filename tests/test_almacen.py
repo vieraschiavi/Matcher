@@ -39,7 +39,7 @@ def test_perfil_va_y_vuelve_entero(almacen, hacer_perfil):
         politica="izquierda",
         intereses=["mate", "cine"],
         bio="hola",
-        preferencias=Preferencias(busca="mujeres", altura_min_cm=160, equipos=["Peñarol"]),
+        preferencias=Preferencias(generos=["mujer"], altura_min_cm=160, equipos=["Peñarol"]),
     )
     leido = almacen.perfil(p.id)
     assert leido.equipo == "Peñarol"
@@ -50,8 +50,8 @@ def test_perfil_va_y_vuelve_entero(almacen, hacer_perfil):
 
 
 def test_like_reciproco_crea_match(almacen, hacer_perfil):
-    a = alta(almacen, hacer_perfil, genero="hombre", preferencias=Preferencias(busca="todos"))
-    b = alta(almacen, hacer_perfil, genero="mujer", preferencias=Preferencias(busca="todos"))
+    a = alta(almacen, hacer_perfil, genero="hombre", preferencias=Preferencias(generos=[]))
+    b = alta(almacen, hacer_perfil, genero="mujer", preferencias=Preferencias(generos=[]))
     r1 = almacen.interactuar(a, b.id, "like")
     assert r1["match"] is False
     r2 = almacen.interactuar(b, a.id, "like")
@@ -87,7 +87,7 @@ def test_no_se_puede_interactuar_dos_veces_ni_consigo_mismo(almacen, hacer_perfi
 
 
 def test_cupo_de_likes_del_plan_gratis(almacen, hacer_perfil):
-    yo = alta(almacen, hacer_perfil, preferencias=Preferencias(busca="todos"))
+    yo = alta(almacen, hacer_perfil, preferencias=Preferencias(generos=[]))
     tope = planes.PLANES["gratis"].limites.likes_por_dia
     otros = [alta(almacen, hacer_perfil) for _ in range(tope + 1)]
     for o in otros[:tope]:
@@ -177,7 +177,7 @@ def test_rebobinar_es_pago_y_devuelve_el_ultimo(almacen, hacer_perfil):
 
 
 def test_deck_no_repite_ni_se_incluye_a_uno_mismo(almacen, hacer_perfil):
-    yo = alta(almacen, hacer_perfil, preferencias=Preferencias(busca="todos"))
+    yo = alta(almacen, hacer_perfil, preferencias=Preferencias(generos=[]))
     otros = [alta(almacen, hacer_perfil) for _ in range(5)]
     ids = [t["id"] for t in almacen.deck(yo)["tarjetas"]]
     assert yo.id not in ids
@@ -188,14 +188,14 @@ def test_deck_no_repite_ni_se_incluye_a_uno_mismo(almacen, hacer_perfil):
 
 
 def test_el_deck_no_expone_el_email(almacen, hacer_perfil):
-    yo = alta(almacen, hacer_perfil, preferencias=Preferencias(busca="todos"))
+    yo = alta(almacen, hacer_perfil, preferencias=Preferencias(generos=[]))
     alta(almacen, hacer_perfil, email="secreto@test.local")
     for t in almacen.deck(yo)["tarjetas"]:
         assert "email" not in t
 
 
 def test_ver_el_deck_suma_vistas(almacen, hacer_perfil):
-    yo = alta(almacen, hacer_perfil, preferencias=Preferencias(busca="todos"))
+    yo = alta(almacen, hacer_perfil, preferencias=Preferencias(generos=[]))
     otro = alta(almacen, hacer_perfil)
     assert almacen.perfil(otro.id).vistas_recibidas == 0
     almacen.deck(yo)
@@ -245,14 +245,14 @@ def test_deshacer_match_borra_los_mensajes(almacen, hacer_perfil):
 
 
 def test_reportar_tambien_descarta(almacen, hacer_perfil):
-    yo = alta(almacen, hacer_perfil, preferencias=Preferencias(busca="todos"))
+    yo = alta(almacen, hacer_perfil, preferencias=Preferencias(generos=[]))
     malo = alta(almacen, hacer_perfil)
     almacen.reportar(yo, malo.id, "spam", "manda links")
     assert malo.id not in [t["id"] for t in almacen.deck(yo)["tarjetas"]]
 
 
 def test_baja_logica_saca_del_deck_pero_no_rompe_el_chat(almacen, hacer_perfil):
-    a = alta(almacen, hacer_perfil, preferencias=Preferencias(busca="todos"))
+    a = alta(almacen, hacer_perfil, preferencias=Preferencias(generos=[]))
     b = alta(almacen, hacer_perfil)
     almacen.interactuar(a, b.id, "like")
     almacen.interactuar(b, a.id, "like")

@@ -52,10 +52,10 @@ PEINADOS = ("corto", "largo", "ondulado", "rodete", "rapado", "rulos", "flequill
 # Probabilidad de barba por género. Es lo único que el género condiciona: el
 # peinado, la ropa y los accesorios se sortean igual para todos. Antes no se
 # miraba el género y la mitad de los perfiles de mujeres salían con barba.
-PROB_BARBA = {"hombre": 45, "no_binario": 12, "mujer": 0}
+PROB_BARBA = {"hombre": 45, "trans": 12, "otro": 12, "mujer": 0}
 
 
-def _rasgos(clave: str, genero: str = "no_binario") -> dict:
+def _rasgos(clave: str, genero: str = "otro") -> dict:
     """Rasgos estables de una persona, derivados del id del perfil.
 
     Se calculan una sola vez por perfil (no por foto) para que las 10 fotos
@@ -152,7 +152,7 @@ def _pelo_svg(r: dict, cx: float, cy: float) -> str:
     return detras, delante
 
 
-def svg(clave: str, inicial: str, indice: int = 0, genero: str = "no_binario") -> str:
+def svg(clave: str, inicial: str, indice: int = 0, genero: str = "otro") -> str:
     """Retrato de 800×1000 (proporción de tarjeta de citas).
 
     `indice` cambia fondo, encuadre y pose — misma persona, otra foto.
@@ -280,6 +280,6 @@ def svg(clave: str, inicial: str, indice: int = 0, genero: str = "no_binario") -
     )
 
 
-def data_uri(clave: str, inicial: str, indice: int = 0, genero: str = "no_binario") -> str:
+def data_uri(clave: str, inicial: str, indice: int = 0, genero: str = "otro") -> str:
     crudo = svg(clave, inicial, indice, genero).encode("utf-8")
     return "data:image/svg+xml;base64," + base64.b64encode(crudo).decode("ascii")

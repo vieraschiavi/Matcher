@@ -9,15 +9,32 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 # ---------------------------------------------------------------------------
 # Vocabularios cerrados. Son str y no Enum a propósito: viajan tal cual a JSON,
 # a SQLite y al frontend sin serializadores intermedios.
 # ---------------------------------------------------------------------------
-GENEROS = ("mujer", "hombre", "no_binario")
-ORIENTACIONES = ("mujeres", "hombres", "todos")
+GENEROS = ("mujer", "hombre", "trans", "otro")
+ORIENTACIONES = ("mujeres", "hombres", "todos")   # heredado: ver Preferencias.generos
 POLITICAS = ("izquierda", "derecha", "neutro")
+
+# Qué busca cada persona. Es multi-selección: casi nadie quiere una sola cosa,
+# y obligar a elegir una es lo que hace que el dato no sirva.
+INTENCIONES = (
+    "amistad",
+    "tomar_algo",
+    "algo_casual",
+    "sexo",
+    "relacion_formal",
+    "salir_a_bailar",
+    "disponible_hoy",
+)
+
+# "Disponible hoy" no es una intención permanente: se prende y vence. Si no
+# venciera, a la semana la mitad del padrón figuraría disponible y el filtro
+# dejaría de significar algo.
+HORAS_DISPONIBLE = 24
 PLANES = ("gratis", "plus", "gold")
 TIPOS_INTERACCION = ("like", "superfan", "pass")
 
@@ -86,21 +103,39 @@ class Preferencias:
     obliga a dos búsquedas.
     """
 
-    busca: str = "todos"  # ORIENTACIONES
+    # TODOS los filtros de lista siguen la misma regla: **lista vacía = Todos**.
+    # Es la que hace que la UI pueda ser una sola (chips multi-selección con un
+    # botón "Todos" que limpia) para género, política, equipo e intención.
+    generos: list[str] = field(default_factory=list)     # vacío = todos
     edad_min: int = 18
     edad_max: int = 99
     altura_min_cm: int | None = None
     altura_max_cm: int | None = None
     politicas: list[str] = field(default_factory=list)   # vacío = cualquiera
     equipos: list[str] = field(default_factory=list)     # vacío = cualquiera
+    intenciones: list[str] = field(default_factory=list)  # vacío = cualquiera
     solo_mi_pais: bool = False
     distancia_max_km: int | None = None
     solo_verificados: bool = False
     intereses: list[str] = field(default_factory=list)
 
+    @property
+    def busca(self) -> str:
+        """Compatibilidad con el valor único viejo. Se sigue exponiendo porque
+        hay perfiles guardados con `busca` y clientes viejos que lo mandan."""
+        if set(self.generos) == {"mujer"}:
+            return "mujeres"
+        if set(self.generos) == {"hombre"}:
+            return "hombres"
+        return "todos"
+
     def validar(self) -> None:
-        if self.busca not in ORIENTACIONES:
-            raise DatosInvalidos(f"orientación desconocida: {self.busca}")
+        for g in self.generos:
+            if g not in GENEROS:
+                raise DatosInvalidos(f"género desconocido: {g}")
+        for i in self.intenciones:
+            if i not in INTENCIONES:
+                raise DatosInvalidos(f"intención desconocida: {i}")
         if not (EDAD_MINIMA <= self.edad_min <= self.edad_max <= EDAD_MAXIMA):
             raise DatosInvalidos("rango de edad inválido (18–99 y mín ≤ máx)")
         alturas = [a for a in (self.altura_min_cm, self.altura_max_cm) if a is not None]
@@ -117,13 +152,15 @@ class Preferencias:
 
     def a_dict(self) -> dict:
         return {
-            "busca": self.busca,
+            "generos": list(self.generos),
+            "busca": self.busca,          # derivado, para clientes viejos
             "edad_min": self.edad_min,
             "edad_max": self.edad_max,
             "altura_min_cm": self.altura_min_cm,
             "altura_max_cm": self.altura_max_cm,
             "politicas": list(self.politicas),
             "equipos": list(self.equipos),
+            "intenciones": list(self.intenciones),
             "solo_mi_pais": self.solo_mi_pais,
             "distancia_max_km": self.distancia_max_km,
             "solo_verificados": self.solo_verificados,
@@ -133,14 +170,22 @@ class Preferencias:
     @staticmethod
     def desde_dict(d: dict | None) -> Preferencias:
         d = d or {}
+        # Migración en lectura: los perfiles viejos guardaron `busca` como
+        # valor único. Se traduce acá y no en una migración de tabla porque el
+        # perfil vive como JSON — así un perfil viejo sigue funcionando sin
+        # tocar la base.
+        generos = list(d.get("generos") or [])
+        if not generos and d.get("busca") in ("mujeres", "hombres"):
+            generos = ["mujer"] if d["busca"] == "mujeres" else ["hombre"]
         return Preferencias(
-            busca=d.get("busca", "todos"),
+            generos=generos,
             edad_min=int(d.get("edad_min", 18)),
             edad_max=int(d.get("edad_max", 99)),
             altura_min_cm=d.get("altura_min_cm"),
             altura_max_cm=d.get("altura_max_cm"),
             politicas=list(d.get("politicas") or []),
             equipos=list(d.get("equipos") or []),
+            intenciones=list(d.get("intenciones") or []),
             solo_mi_pais=bool(d.get("solo_mi_pais", False)),
             distancia_max_km=d.get("distancia_max_km"),
             solo_verificados=bool(d.get("solo_verificados", False)),
@@ -169,6 +214,10 @@ class Perfil:
     equipo: str = ""                  # "" = no le interesa el fútbol
     bio: str = ""
     intereses: list[str] = field(default_factory=list)
+    intenciones: list[str] = field(default_factory=list)
+    # Cuándo vence el "disponible hoy". Se guarda aparte de la lista porque la
+    # intención es permanente y la disponibilidad no.
+    disponible_hasta: datetime | None = None
     fotos: list[Media] = field(default_factory=list)
     videos: list[Media] = field(default_factory=list)
     preferencias: Preferencias = field(default_factory=Preferencias)
@@ -201,6 +250,28 @@ class Perfil:
         return True
 
     @property
+    def disponible_hoy(self) -> bool:
+        return bool(self.disponible_hasta and self.disponible_hasta > datetime.utcnow())
+
+    @property
+    def intenciones_vigentes(self) -> list[str]:
+        """Las intenciones tal como las ve el resto.
+
+        `disponible_hoy` se agrega o se saca según el reloj, no según lo que
+        haya quedado guardado en la lista: un perfil que dice "disponible hoy"
+        desde hace cinco días le está mintiendo a todo el mundo.
+        """
+        vigentes = [i for i in self.intenciones if i != "disponible_hoy"]
+        if self.disponible_hoy:
+            vigentes.append("disponible_hoy")
+        return vigentes
+
+    def marcar_disponible(self, horas: int = HORAS_DISPONIBLE) -> None:
+        self.disponible_hasta = datetime.utcnow() + timedelta(hours=horas)
+        if "disponible_hoy" not in self.intenciones:
+            self.intenciones.append("disponible_hoy")
+
+    @property
     def portada(self) -> str | None:
         fotos = sorted((f for f in self.fotos if f.aprobada), key=lambda f: f.orden)
         return fotos[0].url if fotos else None
@@ -221,6 +292,9 @@ class Perfil:
             raise DatosInvalidos(f"género desconocido: {self.genero}")
         if self.politica not in POLITICAS:
             raise DatosInvalidos(f"postura política desconocida: {self.politica}")
+        for i in self.intenciones:
+            if i not in INTENCIONES:
+                raise DatosInvalidos(f"intención desconocida: {i}")
         if not (ALTURA_MINIMA_CM <= self.altura_cm <= ALTURA_MAXIMA_CM):
             raise DatosInvalidos("altura fuera de rango (130–230 cm)")
         if self.edad() < EDAD_MINIMA:
@@ -253,6 +327,8 @@ class Perfil:
             "equipo": self.equipo,
             "bio": self.bio,
             "intereses": list(self.intereses),
+            "intenciones": self.intenciones_vigentes,
+            "disponible_hoy": self.disponible_hoy,
             "fotos": [f.a_dict() for f in self.fotos],
             "videos": [v.a_dict() for v in self.videos],
             "plan": self.plan,

@@ -21,7 +21,7 @@ def test_propone_a_la_pareja_muy_afin(almacen, hacer_perfil):
         equipo="Peñarol",
         politica="izquierda",
         intereses=COMUNES,
-        preferencias=Preferencias(busca="mujeres"),
+        preferencias=Preferencias(generos=["mujer"]),
     )
     ella = alta(
         almacen,
@@ -31,7 +31,7 @@ def test_propone_a_la_pareja_muy_afin(almacen, hacer_perfil):
         equipo="Peñarol",
         politica="izquierda",
         intereses=COMUNES,
-        preferencias=Preferencias(busca="hombres"),
+        preferencias=Preferencias(generos=["hombre"]),
     )
     creados = automatch.proponer(almacen, yo)
     assert [c["con"]["id"] for c in creados] == [ella.id]
@@ -48,7 +48,7 @@ def test_no_propone_a_quien_no_supera_el_umbral(almacen, hacer_perfil):
         edad=25,
         politica="izquierda",
         intereses=["ajedrez"],
-        preferencias=Preferencias(busca="mujeres"),
+        preferencias=Preferencias(generos=["mujer"]),
     )
     alta(
         almacen,
@@ -59,7 +59,7 @@ def test_no_propone_a_quien_no_supera_el_umbral(almacen, hacer_perfil):
         pais="DE",
         ciudad="DE-BER",
         intereses=["surf"],
-        preferencias=Preferencias(busca="hombres", edad_min=18, edad_max=99),
+        preferencias=Preferencias(generos=["hombre"], edad_min=18, edad_max=99),
     )
     assert automatch.proponer(almacen, yo) == []
 
@@ -73,7 +73,7 @@ def test_no_propone_a_quien_ya_descartaste(almacen, hacer_perfil):
         equipo="Peñarol",
         politica="izquierda",
         intereses=COMUNES,
-        preferencias=Preferencias(busca="mujeres"),
+        preferencias=Preferencias(generos=["mujer"]),
     )
     ella = alta(
         almacen,
@@ -83,7 +83,7 @@ def test_no_propone_a_quien_ya_descartaste(almacen, hacer_perfil):
         equipo="Peñarol",
         politica="izquierda",
         intereses=COMUNES,
-        preferencias=Preferencias(busca="hombres"),
+        preferencias=Preferencias(generos=["hombre"]),
     )
     almacen.interactuar(yo, ella.id, "pass")
     assert automatch.proponer(almacen, yo) == []
@@ -101,7 +101,7 @@ def test_respeta_los_filtros_duros_del_OTRO(almacen, hacer_perfil):
         equipo="Peñarol",
         politica="izquierda",
         intereses=COMUNES,
-        preferencias=Preferencias(busca="mujeres"),
+        preferencias=Preferencias(generos=["mujer"]),
     )
     alta(
         almacen,
@@ -111,7 +111,7 @@ def test_respeta_los_filtros_duros_del_OTRO(almacen, hacer_perfil):
         equipo="Peñarol",
         politica="izquierda",
         intereses=COMUNES,
-        preferencias=Preferencias(busca="hombres", altura_min_cm=185),
+        preferencias=Preferencias(generos=["hombre"], altura_min_cm=185),
     )
     assert automatch.proponer(almacen, yo) == []
 
@@ -125,7 +125,7 @@ def test_respeta_el_cupo_diario_del_plan(almacen, hacer_perfil):
         equipo="Peñarol",
         politica="izquierda",
         intereses=COMUNES,
-        preferencias=Preferencias(busca="mujeres"),
+        preferencias=Preferencias(generos=["mujer"]),
     )
     for _ in range(6):
         alta(
@@ -136,7 +136,7 @@ def test_respeta_el_cupo_diario_del_plan(almacen, hacer_perfil):
             equipo="Peñarol",
             politica="izquierda",
             intereses=COMUNES,
-            preferencias=Preferencias(busca="hombres"),
+            preferencias=Preferencias(generos=["hombre"]),
         )
     creados = automatch.proponer(almacen, yo)
     # Gratis: 1 por día.
@@ -153,7 +153,7 @@ def test_sugerencias_no_crean_nada(almacen, hacer_perfil):
         equipo="Peñarol",
         politica="izquierda",
         intereses=COMUNES,
-        preferencias=Preferencias(busca="mujeres"),
+        preferencias=Preferencias(generos=["mujer"]),
     )
     alta(
         almacen,
@@ -163,7 +163,7 @@ def test_sugerencias_no_crean_nada(almacen, hacer_perfil):
         equipo="Peñarol",
         politica="izquierda",
         intereses=COMUNES,
-        preferencias=Preferencias(busca="hombres"),
+        preferencias=Preferencias(generos=["hombre"]),
     )
     s = automatch.sugerencias(almacen, yo)
     assert len(s) == 1
