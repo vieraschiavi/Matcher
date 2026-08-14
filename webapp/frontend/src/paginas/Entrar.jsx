@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../estado";
+import { GENEROS, alternar } from "../vocabulario";
 
 // Etiqueta y color por proveedor. Sólo se muestran los que el backend reporta
 // como configurados: un botón de "Continuar con Google" que devuelve un error
@@ -39,7 +40,7 @@ export default function Entrar() {
     ciudad: "UY-MVD",
     politica: "neutro",
     equipo: "",
-    busca: "todos",
+    generos_busca: [], // vacío = Todos, igual que en Filtros
   });
 
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -93,7 +94,7 @@ export default function Entrar() {
           ciudad: f.ciudad,
           politica: f.politica,
           equipo: f.equipo,
-          preferencias: { busca: f.busca, edad_min: 18, edad_max: 99 },
+          preferencias: { generos: f.generos_busca, edad_min: 18, edad_max: 99 },
         });
       }
     } catch (e) {
@@ -191,15 +192,8 @@ export default function Entrar() {
                     <select value={f.genero} onChange={set("genero")}>
                       <option value="mujer">Mujer</option>
                       <option value="hombre">Hombre</option>
-                      <option value="no_binario">No binarie</option>
-                    </select>
-                  </label>
-                  <label className="campo">
-                    <span>Buscás</span>
-                    <select value={f.busca} onChange={set("busca")}>
-                      <option value="mujeres">Mujeres</option>
-                      <option value="hombres">Hombres</option>
-                      <option value="todos">Todos</option>
+                      <option value="trans">Trans</option>
+                      <option value="otro">Otro</option>
                     </select>
                   </label>
                   <label className="campo">
@@ -213,6 +207,23 @@ export default function Entrar() {
                     />
                   </label>
                 </div>
+                <label className="campo">
+                  <span>Buscás (podés elegir varios; nada marcado = todos)</span>
+                  <div className="chips">
+                    {GENEROS.map((g) => (
+                      <button
+                        key={g.v}
+                        type="button"
+                        className={`chip ${f.generos_busca.includes(g.v) ? "on" : ""}`}
+                        onClick={() =>
+                          setF({ ...f, generos_busca: alternar(f.generos_busca, g.v) })
+                        }
+                      >
+                        {g.t}
+                      </button>
+                    ))}
+                  </div>
+                </label>
                 <div className="fila">
                   <label className="campo">
                     <span>País</span>

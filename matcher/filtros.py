@@ -28,6 +28,7 @@ MOTIVOS = {
     "altura": "fuera del rango de altura",
     "politica": "postura política filtrada",
     "equipo": "equipo de fútbol filtrado",
+    "intencion": "no busca lo mismo que vos",
     "pais": "fuera de tu país",
     "distancia": "más lejos que tu radio",
     "verificado": "perfil no verificado",
@@ -35,21 +36,15 @@ MOTIVOS = {
 }
 
 
-def _genero_compatible(busca: str, genero: str) -> bool:
-    if busca == "todos":
-        return True
-    if busca == "mujeres":
-        return genero == "mujer"
-    if busca == "hombres":
-        return genero == "hombre"
-    return True
+def _genero_compatible(generos_buscados: list[str], genero: str) -> bool:
+    """Lista vacía = Todos. Es la regla común a todos los filtros de lista."""
+    return not generos_buscados or genero in generos_buscados
 
 
-def _no_binario_siempre_visible(busca: str, genero: str) -> bool:
-    """Las personas no binarias entran en cualquier búsqueda salvo que el otro
-    haya elegido explícitamente un único género. Se decidió así para no
-    dejarlas fuera del producto por default, que es el reclamo histórico."""
-    return genero == "no_binario" and busca == "todos"
+def _intencion_compatible(buscadas: list[str], tiene: list[str]) -> bool:
+    """Alcanza con que coincida UNA. Exigir que coincidan todas vaciaría el
+    deck: nadie marca exactamente el mismo combo que otro."""
+    return not buscadas or bool(set(buscadas) & set(tiene))
 
 
 def distancia_entre(a: Perfil, b: Perfil) -> float | None:
@@ -87,11 +82,15 @@ def pasa_filtros(
         return False, "visto"
 
     # -- género ------------------------------------------------------------
-    if not (
-        _genero_compatible(p.busca, otro.genero)
-        or _no_binario_siempre_visible(p.busca, otro.genero)
-    ):
+    if not _genero_compatible(p.generos, otro.genero):
         return False, "genero"
+
+    # -- qué busca ---------------------------------------------------------
+    # Se compara contra `intenciones_vigentes`, no contra la lista guardada:
+    # "disponible hoy" vence, y filtrar por él tiene que devolver a quien está
+    # disponible hoy de verdad.
+    if not _intencion_compatible(p.intenciones, otro.intenciones_vigentes):
+        return False, "intencion"
 
     # -- edad --------------------------------------------------------------
     edad_otro = otro.edad(hoy)
@@ -130,10 +129,7 @@ def pasa_filtros(
     # -- reciprocidad ------------------------------------------------------
     if reciproco:
         q = otro.preferencias
-        if not (
-            _genero_compatible(q.busca, yo.genero)
-            or _no_binario_siempre_visible(q.busca, yo.genero)
-        ):
+        if not _genero_compatible(q.generos, yo.genero):
             return False, "genero_inverso"
         if not (q.edad_min <= yo.edad(hoy) <= q.edad_max):
             return False, "edad_inversa"

@@ -109,6 +109,17 @@ button { font-family: inherit; }
 .btn-fantasma { background: none; }
 .btn-bloque { width: 100%; }
 
+/* ---- radar ---- */
+.radar-svg { width: 100%; height: auto; display: block; }
+.radar-fondo { fill: var(--navy-950); }
+.radar-anillo { fill: none; stroke: var(--line); stroke-width: 1; }
+.radar-etiqueta { fill: var(--faint); font-size: 11px; font-family: var(--sans); }
+.radar-cruz { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; }
+.radar-yo { fill: var(--coral); stroke: #fff; stroke-width: 2; }
+.radar-punto { cursor: pointer; }
+.radar-punto-borde { fill: none; stroke: #fff; stroke-width: 2; }
+.radar-punto-cruce { fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 3 3; }
+
 /* ---- deck de citas ---- */
 .deck-zona {
   display: grid; grid-template-columns: minmax(0, 420px) minmax(260px, 1fr);
@@ -203,6 +214,35 @@ textarea { resize: vertical; min-height: 78px; }
 .fila { display: flex; gap: 10px; }
 .fila > * { flex: 1; }
 
+/* ---- slider de rango doble (edad / altura / distancia) ---- */
+.rango-doble { margin-bottom: 13px; }
+.rango-doble-valores {
+  display: flex; justify-content: space-between; font-size: 13px; font-weight: 800;
+  margin-bottom: 8px; font-variant-numeric: tabular-nums;
+}
+.rango-doble-pista { position: relative; height: 28px; }
+.rango-doble-relleno {
+  position: absolute; top: 12px; height: 4px; background: var(--coral); border-radius: 2px;
+}
+.rango-doble-pista input[type="range"] {
+  position: absolute; top: 0; left: 0; width: 100%; height: 28px; margin: 0;
+  background: none; -webkit-appearance: none; appearance: none; pointer-events: none;
+}
+.rango-doble-pista input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; background: var(--line); border-radius: 2px;
+}
+.rango-doble-pista input[type="range"]::-moz-range-track {
+  height: 4px; background: var(--line); border-radius: 2px;
+}
+.rango-doble-pista input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; pointer-events: auto; width: 20px; height: 20px; margin-top: -8px;
+  border-radius: 50%; background: #fff; border: 3px solid var(--coral); cursor: pointer;
+}
+.rango-doble-pista input[type="range"]::-moz-range-thumb {
+  pointer-events: auto; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  border: 3px solid var(--coral); cursor: pointer;
+}
+
 /* Chips: filtros de política, equipo e intereses. */
 .chips { display: flex; flex-wrap: wrap; gap: 7px; }
 .chip {
@@ -242,6 +282,24 @@ table.tabla tr:hover td { background: var(--navy-800); }
 .aviso-oro { background: rgba(242, 180, 65, .1); border-color: rgba(242, 180, 65, .4); color: #ffe4ad; }
 .aviso-error { background: rgba(255, 118, 117, .12); border-color: rgba(255, 118, 117, .45); color: #ffd0cf; }
 .aviso-ok { background: rgba(124, 194, 66, .12); border-color: rgba(124, 194, 66, .45); color: #d5f0bd; }
+
+/* ---- cámara en el momento ---- */
+.camara-modal { max-width: 480px; }
+.camara-visor {
+  position: relative; width: 100%; aspect-ratio: 3/4; border-radius: 14px; overflow: hidden;
+  background: #000; margin-bottom: 14px;
+}
+.camara-visor video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.camara-cuenta {
+  position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,.6); color: var(--red);
+  font-weight: 800; padding: 4px 10px; border-radius: 999px; font-size: 13px;
+}
+.camara-acciones { display: flex; gap: 9px; }
+.camara-acciones .btn { flex: 1; }
+.galeria .camara-boton {
+  display: grid; place-items: center; color: var(--faint); font-size: 20px; cursor: pointer;
+  gap: 3px; font-size: 11px; text-align: center;
+}
 
 /* ---- modal de match ---- */
 .velo-modal {

@@ -103,6 +103,33 @@ CREATE TABLE IF NOT EXISTS identidades (
 -- los datos que sólo puede dar la persona (nacimiento, género, ciudad…). Se
 -- guarda acá y no como perfil incompleto: un perfil a medias entra a consultas
 -- que no lo esperan y ensucia el deck.
+-- Ubicación: sólo la ÚLTIMA de cada persona, ya redondeada a celda de mapa.
+-- No hay tabla de historial a propósito — ver matcher/cruces.py.
+CREATE TABLE IF NOT EXISTS ubicaciones (
+    usuario_id TEXT PRIMARY KEY,
+    lat        REAL NOT NULL,
+    lon        REAL NOT NULL,
+    momento    TEXT NOT NULL
+);
+-- Pings efímeros para detectar cruces. Se borran solos a las 6 horas.
+CREATE TABLE IF NOT EXISTS pings (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id TEXT NOT NULL,
+    celda      TEXT NOT NULL,
+    momento    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_ping_celda ON pings(celda, momento);
+CREATE INDEX IF NOT EXISTS ix_ping_momento ON pings(momento);
+-- Cruces acumulados. Par ordenado, igual que los matches.
+CREATE TABLE IF NOT EXISTS cruces (
+    a_id     TEXT NOT NULL,
+    b_id     TEXT NOT NULL,
+    veces    INTEGER NOT NULL DEFAULT 1,
+    primera  TEXT NOT NULL,
+    ultima   TEXT NOT NULL,
+    cerca_de TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (a_id, b_id)
+);
 CREATE TABLE IF NOT EXISTS altas_pendientes (
     token     TEXT PRIMARY KEY,
     proveedor TEXT NOT NULL,
@@ -716,6 +743,120 @@ class Almacen:
         self.con.commit()
 
     # ------------------------------------------------------------------
+    # Ubicación, pings y cruces
+    # ------------------------------------------------------------------
+    def guardar_ubicacion(self, usuario_id: str, lat: float, lon: float, momento: datetime) -> None:
+        """Pisa la anterior. Una fila por persona: no hay historial de
+        recorridos, y no tenerlo es la única forma de no filtrarlo."""
+        self.con.execute(
+            "INSERT INTO ubicaciones (usuario_id, lat, lon, momento) VALUES (?,?,?,?) "
+            "ON CONFLICT(usuario_id) DO UPDATE SET lat=excluded.lat, lon=excluded.lon, "
+            "momento=excluded.momento",
+            (usuario_id, lat, lon, momento.isoformat()),
+        )
+        self.con.commit()
+
+    def ubicacion_de(self, usuario_id: str) -> dict | None:
+        fila = self.con.execute(
+            "SELECT lat, lon, momento FROM ubicaciones WHERE usuario_id = ?", (usuario_id,)
+        ).fetchone()
+        return dict(fila) if fila else None
+
+    def guardar_ping(self, usuario_id: str, celda: str, momento: datetime) -> None:
+        self.con.execute(
+            "INSERT INTO pings (usuario_id, celda, momento) VALUES (?,?,?)",
+            (usuario_id, celda, momento.isoformat()),
+        )
+        self.con.commit()
+
+    def limpiar_pings(self, antes_de: datetime) -> int:
+        cur = self.con.execute("DELETE FROM pings WHERE momento < ?", (antes_de.isoformat(),))
+        self.con.commit()
+        return cur.rowcount
+
+    def detectar_cruces(
+        self,
+        usuario_id: str,
+        celda: str,
+        momento: datetime,
+        ventana: timedelta,
+        max_por_dia: int,
+    ) -> list[dict]:
+        """Quién más estuvo en esta celda dentro de la ventana. Suma el cruce
+        y devuelve los nuevos."""
+        filas = self.con.execute(
+            "SELECT DISTINCT usuario_id FROM pings WHERE celda = ? AND usuario_id != ? "
+            "AND momento >= ?",
+            (celda, usuario_id, (momento - ventana).isoformat()),
+        ).fetchall()
+
+        inicio_dia = datetime(momento.year, momento.month, momento.day).isoformat()
+        nuevos = []
+        for fila in filas:
+            otro = fila["usuario_id"]
+            a, b = sorted([usuario_id, otro])
+            existente = self.con.execute(
+                "SELECT veces, ultima FROM cruces WHERE a_id = ? AND b_id = ?", (a, b)
+            ).fetchone()
+
+            if existente:
+                # Un cruce por ventana, y con tope diario: quedarse una hora en
+                # el mismo café no puede valer veinte cruces.
+                if existente["ultima"] >= (momento - ventana).isoformat():
+                    continue
+                del_dia = self.con.execute(
+                    "SELECT veces FROM cruces WHERE a_id = ? AND b_id = ? AND ultima >= ?",
+                    (a, b, inicio_dia),
+                ).fetchone()
+                if del_dia and existente["veces"] >= max_por_dia and existente["ultima"] >= inicio_dia:
+                    continue
+                self.con.execute(
+                    "UPDATE cruces SET veces = veces + 1, ultima = ?, cerca_de = ? "
+                    "WHERE a_id = ? AND b_id = ?",
+                    (momento.isoformat(), celda, a, b),
+                )
+            else:
+                self.con.execute(
+                    "INSERT INTO cruces (a_id, b_id, veces, primera, ultima, cerca_de) "
+                    "VALUES (?,?,1,?,?,?)",
+                    (a, b, momento.isoformat(), momento.isoformat(), celda),
+                )
+            nuevos.append({"otro_id": otro, "celda": celda})
+        self.con.commit()
+        return nuevos
+
+    def sumar_cruce(
+        self, a: str, b: str, veces: int, primera: datetime, ultima: datetime, celda: str = ""
+    ) -> None:
+        """Alta directa de un cruce. La usa el seed de la demo; el flujo real
+        pasa por `detectar_cruces`."""
+        a, b = sorted([a, b])
+        self.con.execute(
+            "INSERT INTO cruces (a_id, b_id, veces, primera, ultima, cerca_de) VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT(a_id, b_id) DO UPDATE SET veces = veces + excluded.veces, "
+            "ultima = max(ultima, excluded.ultima)",
+            (a, b, veces, primera.isoformat(), ultima.isoformat(), celda),
+        )
+        self.con.commit()
+
+    def cruces_de(self, usuario_id: str, limite: int = 50) -> list[dict]:
+        filas = self.con.execute(
+            "SELECT CASE WHEN a_id = ? THEN b_id ELSE a_id END AS otro_id, "
+            "veces, primera, ultima, cerca_de FROM cruces "
+            "WHERE a_id = ? OR b_id = ? ORDER BY veces DESC, ultima DESC LIMIT ?",
+            (usuario_id, usuario_id, usuario_id, limite),
+        ).fetchall()
+        return [dict(f) for f in filas]
+
+    def total_cruces(self, usuario_id: str) -> tuple[int, int]:
+        fila = self.con.execute(
+            "SELECT COALESCE(SUM(veces), 0) total, COUNT(*) personas FROM cruces "
+            "WHERE a_id = ? OR b_id = ?",
+            (usuario_id, usuario_id),
+        ).fetchone()
+        return fila["total"], fila["personas"]
+
+    # ------------------------------------------------------------------
     # Pagos
     # ------------------------------------------------------------------
     def registrar_pago(
@@ -746,3 +887,11 @@ class Almacen:
             "SELECT * FROM pagos WHERE usuario_id = ? ORDER BY momento DESC", (usuario_id,)
         ).fetchall()
         return [dict(f) for f in filas]
+
+    def pago_por_referencia(self, referencia: str) -> dict | None:
+        """La usa el webhook: ahí no hay una sesión de usuario, sólo lo que
+        avisó la pasarela, así que hace falta encontrar de quién es el pago."""
+        fila = self.con.execute(
+            "SELECT * FROM pagos WHERE referencia = ?", (referencia,)
+        ).fetchone()
+        return dict(fila) if fila else None
