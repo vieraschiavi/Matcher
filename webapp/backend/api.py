@@ -253,6 +253,10 @@ def salud():
         "perfiles": len(almacen().todos()),
         "demo": POBLAR_DEMO,
         "pasarela": os.getenv("MATCHER_PASARELA", "demo"),
+        # Si esto es False en un despliegue serverless, las sesiones se caen
+        # solas: cada instancia firma con una clave distinta. Es un booleano,
+        # nunca el secreto — /api/salud es público.
+        "sesiones_compartidas": seguridad.secreto_compartido(),
     }
 
 

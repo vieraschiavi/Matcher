@@ -25,13 +25,23 @@ export default function Radar() {
   const [radioKm, setRadioKm] = useState(15);
   const [seleccion, setSeleccion] = useState(null);
   const [permiso, setPermiso] = useState("pendiente"); // pendiente | ok | negado
+  const [fallo, setFallo] = useState("");
   const [pulso, setPulso] = useState(0);
   const intervalo = useRef(null);
 
+  // El `finally` apaga "Ubicándote…" pase lo que pase. Con el `setCargando`
+  // sólo en el camino feliz, un pedido fallido dejaba el radar en
+  // "Ubicándote…" para siempre, sin radar, sin lista y sin ningún error a la
+  // vista: la pantalla parecía rota.
   const cargarRadar = async (radio) => {
-    const r = await api.radar(radio);
-    setDatos(r);
-    setCargando(false);
+    try {
+      setDatos(await api.radar(radio));
+      setFallo("");
+    } catch (e) {
+      setFallo(e.message);
+    } finally {
+      setCargando(false);
+    }
   };
 
   // Los cruces se muestran EN esta pantalla, no detrás de un botón que lleva a
@@ -100,6 +110,12 @@ export default function Radar() {
         {datos?.precision_m || 500} m: nadie ve tu ubicación exacta, y vos no ves la de nadie.
         {pulso > 0 && " Detectamos un cruce nuevo — mirá abajo."}
       </p>
+
+      {fallo && (
+        <div className="aviso aviso-error" style={{ marginBottom: 16 }}>
+          No se pudo cargar el radar: {fallo}
+        </div>
+      )}
 
       {permiso === "negado" && (
         <div className="aviso aviso-info" style={{ marginBottom: 16 }}>

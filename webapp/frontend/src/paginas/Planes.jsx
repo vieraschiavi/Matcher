@@ -14,8 +14,11 @@ export default function Planes() {
   const [historial, setHistorial] = useState([]);
 
   useEffect(() => {
-    api.planes().then(setCatalogo);
-    api.historialPagos().then((r) => setHistorial(r.pagos));
+    // El catálogo de planes es público; el historial no. Si falla el
+    // historial la pantalla igual tiene que mostrarse: antes cualquiera de
+    // los dos la dejaba en "Cargando planes…" y no se podía ni ver el precio.
+    api.planes().then(setCatalogo).catch((e) => setError(e.message));
+    api.historialPagos().then((r) => setHistorial(r.pagos)).catch(() => setHistorial([]));
   }, [perfil?.plan]);
 
   // La pasarela demo redirige a /#/pago/<referencia>. Con una pasarela real,
@@ -57,12 +60,25 @@ export default function Planes() {
   };
 
   const cancelar = async () => {
-    const r = await api.cancelarPlan();
-    await refrescar();
-    setOk(r.mensaje);
+    setError("");
+    try {
+      const r = await api.cancelarPlan();
+      await refrescar();
+      setOk(r.mensaje);
+    } catch (e) {
+      setError(e.message);
+    }
   };
 
-  if (!catalogo) return <p className="page-sub">Cargando planes…</p>;
+  if (!catalogo) {
+    // Un error acá tiene que verse. Devolver siempre "Cargando planes…" es
+    // lo que hacía parecer que el botón del plan pago "no hacía nada".
+    return error ? (
+      <div className="aviso aviso-error">No se pudieron cargar los planes: {error}</div>
+    ) : (
+      <p className="page-sub">Cargando planes…</p>
+    );
+  }
 
   const referenciaMasCara = Math.max(
     ...catalogo.referencia_competencia.map((c) => c.precio_mes_aprox)

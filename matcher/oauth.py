@@ -16,6 +16,8 @@ sin verificar es texto que manda el cliente.
 
 El `state` es obligatorio y se valida: sin eso, cualquiera puede inducir un
 login ajeno (CSRF sobre el callback). Los `state` son de un solo uso y vencen.
+Van firmados (no guardados) porque el callback puede caer en otra instancia
+que nunca vio arrancar el login — ver el comentario de `_CONSUMIDOS`.
 
 Sin credenciales configuradas (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`),
 `configurado()` devuelve False y la UI no muestra el botón. No hay modo
@@ -27,18 +29,28 @@ from __future__ import annotations
 
 import json
 import os
-import secrets
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
+from . import seguridad
 from .modelos import DatosInvalidos
 
-# Los `state` viven en memoria del proceso: son de segundos y de un solo uso.
-# Con varios workers hay que moverlos a la base o a un caché compartido.
-_ESTADOS: dict[str, tuple[float, str]] = {}
+# El `state` va FIRMADO, no guardado.
+#
+# Antes vivía en un dict del proceso. En serverless eso no funciona nunca: la
+# instancia que arma la URL de autorización no es la misma que atiende el
+# callback, así que el `state` no estaba y el login con Google fallaba SIEMPRE
+# con "el login expiró". Firmado, cualquier instancia lo valida.
+#
+# Lo que sí sigue necesitando memoria es el "de un solo uso": acá se anotan los
+# que ya se usaron, para no aceptar dos veces el mismo callback. Con varias
+# instancias esa parte sólo vale dentro de cada una — un replay dentro de los
+# 10 minutos podría colarse por otra instancia. Se acota con la vida corta;
+# cerrarlo del todo pide un almacén compartido (Redis o una base con disco).
+_CONSUMIDOS: dict[str, float] = {}
 VIDA_ESTADO_SEG = 600
 
 
@@ -106,30 +118,33 @@ def redirect_uri(base: str, nombre: str) -> str:
     return f"{base.rstrip('/')}/api/auth/{nombre}/callback"
 
 
-def _limpiar_estados(ahora: float) -> None:
-    for s, (creado, _) in list(_ESTADOS.items()):
-        if ahora - creado > VIDA_ESTADO_SEG:
-            _ESTADOS.pop(s, None)
+def _limpiar_consumidos(ahora: float) -> None:
+    for s, cuando in list(_CONSUMIDOS.items()):
+        if ahora - cuando > VIDA_ESTADO_SEG:
+            _CONSUMIDOS.pop(s, None)
 
 
 def nuevo_estado(destino: str = "/") -> str:
-    ahora = time.time()
-    _limpiar_estados(ahora)
-    s = secrets.token_urlsafe(24)
-    _ESTADOS[s] = (ahora, destino)
-    return s
+    _limpiar_consumidos(time.time())
+    return seguridad.firmar_datos({"d": destino})
 
 
 def consumir_estado(s: str) -> str:
-    """Valida y quema el `state`. De un solo uso: si se pudiera reusar, se
-    puede reproducir un callback capturado."""
-    dato = _ESTADOS.pop(s or "", None)
-    if not dato:
+    """Valida y quema el `state`.
+
+    De un solo uso: sin eso, un callback capturado se puede reproducir. Y
+    obligatorio: sin `state` cualquiera induce un login ajeno (CSRF).
+    """
+    datos = seguridad.leer_datos(s or "", VIDA_ESTADO_SEG)
+    if not datos:
         raise DatosInvalidos("el login expiró o el enlace ya se usó; probá de nuevo")
-    creado, destino = dato
-    if time.time() - creado > VIDA_ESTADO_SEG:
-        raise DatosInvalidos("el login expiró; probá de nuevo")
-    return destino
+    ahora = time.time()
+    _limpiar_consumidos(ahora)
+    if s in _CONSUMIDOS:
+        raise DatosInvalidos("el login expiró o el enlace ya se usó; probá de nuevo")
+    _CONSUMIDOS[s] = ahora
+    destino = datos.get("d")
+    return destino if isinstance(destino, str) else "/"
 
 
 def url_de_autorizacion(nombre: str, base: str, destino: str = "/") -> tuple[str, str]:

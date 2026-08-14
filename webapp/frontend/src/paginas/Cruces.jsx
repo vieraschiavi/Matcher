@@ -7,7 +7,9 @@ export default function Cruces() {
   const [datos, setDatos] = useState(null);
 
   useEffect(() => {
-    api.cruces().then(setDatos);
+    // Sin el catch, un pedido fallido dejaba `datos` en null y la pantalla
+    // colgada en "Cargando…" para siempre.
+    api.cruces().then(setDatos).catch(() => setDatos({ resumen: {}, personas: [] }));
   }, []);
 
   const like = async (id) => {

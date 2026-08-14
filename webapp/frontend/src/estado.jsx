@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { api, token } from "./api";
+import { SESION_CAIDA, api, token } from "./api";
 
 // Sesión + catálogos en un solo contexto. Los catálogos (países, ciudades,
 // equipos) se piden una vez y se comparten: son ~40 KB y no cambian durante
@@ -35,6 +35,20 @@ export function Proveedor({ children }) {
     api.catalogos().then(setCatalogos).catch(() => setCatalogos(null));
     refrescar();
   }, [refrescar]);
+
+  // Si el servidor rechaza la sesión, se vuelve al login enseguida. Sin esto
+  // la app quedaba con `perfil` en memoria y un token que ya no valía: cada
+  // pantalla mostraba "Cargando…" para siempre y parecía que no funcionaba
+  // nada.
+  useEffect(() => {
+    const caida = () => {
+      setPerfil(null);
+      setCupos(null);
+      setCargando(false);
+    };
+    window.addEventListener(SESION_CAIDA, caida);
+    return () => window.removeEventListener(SESION_CAIDA, caida);
+  }, []);
 
   const entrar = async (email, clave) => {
     const r = await api.login(email, clave);

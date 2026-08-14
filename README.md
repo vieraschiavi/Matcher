@@ -220,6 +220,7 @@ await p.screenshot({ path: "deck.png" });
 | Variable | Default | Para qué |
 |---|---|---|
 | `MATCHER_BD` | `datos/matcher.db` | Ruta de la base |
+| `MATCHER_SECRETO` | — | Clave para firmar las sesiones. **Obligatoria en serverless** (ver abajo) |
 | `MATCHER_DEMO` | `1` | Sembrar la demo al arrancar |
 | `MATCHER_DEMO_CLAVE` | `matcher2026` | Contraseña de las cuentas de prueba |
 | `MATCHER_FOTOS` | pack incluido | Carpeta de fotos, o `ninguna` |
@@ -227,6 +228,29 @@ await p.screenshot({ path: "deck.png" });
 | `MATCHER_PUERTO` | `8820` | Puerto del backend |
 | `MATCHER_URL_PUBLICA` | la del request | URL pública, para el `redirect_uri` de OAuth |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | Habilitan "Continuar con Google" |
+| `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | — | Habilitan "Continuar con Facebook" |
+
+#### `MATCHER_SECRETO`: por qué no es opcional en Vercel
+
+Cada instancia serverless tiene su propio disco efímero y, por lo tanto, su
+propia base. Con la sesión guardada sólo en la tabla `sesiones`, el token que
+emite una instancia no existe en la de al lado: medimos **10 de 24 pedidos en
+paralelo devolviendo 401**, y a los 90 segundos la sesión moría del todo. En
+la app no se veía un error, se veía "Cargando…" para siempre.
+
+La sesión va firmada con HMAC-SHA256 sobre `MATCHER_SECRETO`, así que
+cualquier instancia la valida sin compartir estado. **Sin la variable cada
+proceso firma con una clave al azar** y vuelve el problema — no hay un valor
+por defecto fijo a propósito: un secreto cableado en un repo público deja que
+cualquiera se firme una sesión ajena.
+
+Para verificar que quedó puesta, `GET /api/salud` devuelve
+`"sesiones_compartidas": true`.
+
+Ojo con lo que **no** arregla: los datos que se escriben (likes, matches,
+fotos subidas) siguen viviendo en el disco efímero y se pierden en cada
+arranque en frío. La demo se resiembra igual porque la semilla es fija. Para
+usuarios de verdad hay que apuntar `MATCHER_BD` a una base con disco.
 
 ---
 

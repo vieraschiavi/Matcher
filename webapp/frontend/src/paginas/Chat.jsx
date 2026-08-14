@@ -11,11 +11,15 @@ export default function Chat() {
   const [cargando, setCargando] = useState(true);
   const fin = useRef(null);
 
+  // El `finally` no es decorativo: si el pedido falla (sesión vencida, red
+  // caída) y sólo se apaga `cargando` en el `then`, la pantalla se queda en
+  // "Cargando…" para siempre y no hay forma de saber qué pasó.
   useEffect(() => {
-    api.matches().then((r) => {
-      setMatches(r.matches);
-      setCargando(false);
-    });
+    api
+      .matches()
+      .then((r) => setMatches(r.matches))
+      .catch(() => setMatches([]))
+      .finally(() => setCargando(false));
   }, []);
 
   useEffect(() => {
@@ -23,7 +27,7 @@ export default function Chat() {
       setMensajes([]);
       return;
     }
-    api.mensajes(id).then((r) => setMensajes(r.mensajes));
+    api.mensajes(id).then((r) => setMensajes(r.mensajes)).catch(() => setMensajes([]));
   }, [id]);
 
   useEffect(() => {

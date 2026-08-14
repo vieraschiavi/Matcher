@@ -82,6 +82,13 @@ CREATE TABLE IF NOT EXISTS sesiones (
     usuario_id TEXT NOT NULL,
     creado     TEXT NOT NULL
 );
+-- Tokens firmados que ya no valen: sesiones cerradas y altas ya usadas. Sin
+-- esta lista, la verificación por firma los seguiría aceptando y ni el logout
+-- ni el "de un solo uso" del alta cerrarían nada.
+CREATE TABLE IF NOT EXISTS tokens_revocados (
+    token   TEXT PRIMARY KEY,
+    momento TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS reportes (
     id         TEXT PRIMARY KEY,
     de_id      TEXT NOT NULL,
@@ -303,7 +310,7 @@ class Almacen:
         perfil = self._desde_json(fila["datos"])
         if not perfil.activo:
             return None
-        token = seguridad.nuevo_token()
+        token = seguridad.firmar_sesion(perfil.id)
         self.con.execute(
             "INSERT INTO sesiones (token, usuario_id, creado) VALUES (?,?,?)",
             (token, perfil.id, datetime.utcnow().isoformat()),
@@ -319,7 +326,7 @@ class Almacen:
         es Google, no nosotros. No la expongas por HTTP sin esa verificación
         previa — sería un login sin credenciales.
         """
-        token = seguridad.nuevo_token()
+        token = seguridad.firmar_sesion(perfil.id)
         self.con.execute(
             "INSERT INTO sesiones (token, usuario_id, creado) VALUES (?,?,?)",
             (token, perfil.id, datetime.utcnow().isoformat()),
@@ -344,13 +351,30 @@ class Almacen:
         return [f["proveedor"] for f in filas]
 
     def guardar_alta_pendiente(self, proveedor: str, email: str, nombre: str, foto: str) -> str:
-        """Guarda un email ya verificado por el proveedor, a la espera de que la
-        persona complete los datos que faltan. Devuelve el token del alta."""
+        """Alta a medio hacer: el proveedor ya verificó el email y falta que la
+        persona complete el resto. Devuelve el token del alta.
+
+        Va firmado además de guardado, por el mismo motivo que las sesiones: el
+        callback de Google puede caer en una instancia y la pantalla de
+        "completar" pegarle a otra, que no tendría la fila y contestaría "el
+        alta expiró" sin que haya expirado nada.
+
+        Al consumirla se anota en `tokens_revocados`: borrar la fila no alcanza,
+        porque la verificación por firma la resucitaría y el alta dejaría de ser
+        de un solo uso.
+        """
         self.con.execute(
             "DELETE FROM altas_pendientes WHERE creado < ?",
             ((datetime.utcnow() - VIDA_ALTA_PENDIENTE).isoformat(),),
         )
-        token = seguridad.nuevo_token()
+        token = seguridad.firmar_datos(
+            {
+                "p": proveedor,
+                "e": email.strip().lower(),
+                "nom": nombre,
+                "f": foto,
+            }
+        )
         self.con.execute(
             "INSERT INTO altas_pendientes (token, proveedor, email, nombre, foto, creado) "
             "VALUES (?,?,?,?,?,?)",
@@ -361,28 +385,79 @@ class Almacen:
         return token
 
     def leer_alta_pendiente(self, token: str, consumir: bool = False) -> dict | None:
+        if self._revocado(token):
+            return None
+
         fila = self.con.execute(
             "SELECT * FROM altas_pendientes WHERE token = ?", (token,)
         ).fetchone()
-        if not fila:
-            return None
-        if _dt(fila["creado"]) < datetime.utcnow() - VIDA_ALTA_PENDIENTE:
-            self.con.execute("DELETE FROM altas_pendientes WHERE token = ?", (token,))
-            self.con.commit()
+        if fila:
+            if _dt(fila["creado"]) < datetime.utcnow() - VIDA_ALTA_PENDIENTE:
+                self.con.execute("DELETE FROM altas_pendientes WHERE token = ?", (token,))
+                self.con.commit()
+                return None
+            if consumir:
+                self.con.execute("DELETE FROM altas_pendientes WHERE token = ?", (token,))
+                self._revocar(token)
+                self.con.commit()
+            return dict(fila)
+
+        # No está en esta base: puede haberla emitido otra instancia.
+        datos = seguridad.leer_datos(token, int(VIDA_ALTA_PENDIENTE.total_seconds()))
+        if not datos:
             return None
         if consumir:
-            self.con.execute("DELETE FROM altas_pendientes WHERE token = ?", (token,))
+            self._revocar(token)
             self.con.commit()
-        return dict(fila)
+        return {
+            "token": token,
+            "proveedor": datos.get("p", ""),
+            "email": datos.get("e", ""),
+            "nombre": datos.get("nom", ""),
+            "foto": datos.get("f", ""),
+        }
 
     def por_token(self, token: str) -> Perfil | None:
         fila = self.con.execute(
             "SELECT usuario_id FROM sesiones WHERE token = ?", (token,)
         ).fetchone()
-        return self.perfil(fila["usuario_id"]) if fila else None
+        if fila:
+            return self.perfil(fila["usuario_id"])
+
+        # La sesión no está en ESTA base. Puede ser porque se cerró, o porque
+        # el token lo emitió otra instancia serverless con su propio disco
+        # efímero. La firma distingue los dos casos sin compartir estado.
+        usuario_id = seguridad.leer_sesion(token)
+        if not usuario_id or self._revocado(token):
+            return None
+        return self.perfil(usuario_id)
+
+    def _revocado(self, token: str) -> bool:
+        fila = self.con.execute(
+            "SELECT 1 FROM tokens_revocados WHERE token = ?", (token,)
+        ).fetchone()
+        return fila is not None
+
+    def _revocar(self, token: str) -> None:
+        self.con.execute(
+            "INSERT OR REPLACE INTO tokens_revocados (token, momento) VALUES (?,?)",
+            (token, datetime.utcnow().isoformat()),
+        )
 
     def logout(self, token: str) -> None:
+        """Cierra la sesión.
+
+        Se borra la fila y además se anota el token como revocado: si no,
+        `por_token` lo aceptaría por la firma y el logout no cerraría nada.
+
+        Ojo con el disco efímero: la lista de revocados se pierde igual que el
+        resto de la base, así que ahí un token cerrado sigue sirviendo en otra
+        instancia hasta que vence. Revocar de verdad necesita una base con
+        disco (ver MATCHER_BD).
+        """
         self.con.execute("DELETE FROM sesiones WHERE token = ?", (token,))
+        if seguridad.leer_sesion(token):
+            self._revocar(token)
         self.con.commit()
 
     def tocar(self, id_: str) -> None:

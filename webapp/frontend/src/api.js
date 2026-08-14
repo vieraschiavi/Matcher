@@ -53,11 +53,19 @@ async function pedir(ruta, { metodo = "GET", cuerpo } = {}) {
   const texto = await res.text();
   const datos = texto ? JSON.parse(texto) : null;
   if (!res.ok) {
-    if (res.status === 401) token.borrar();
+    if (res.status === 401) {
+      token.borrar();
+      // Además de borrar el token hay que avisarle a la app. Antes sólo se
+      // borraba: el estado seguía creyendo que había perfil, así que en vez
+      // de volver al login cada pantalla se quedaba colgada en "Cargando…".
+      window.dispatchEvent(new CustomEvent(SESION_CAIDA));
+    }
     throw new ErrorApi(res.status, datos);
   }
   return datos;
 }
+
+export const SESION_CAIDA = "matcher:sesion-caida";
 
 export const api = {
   salud: () => pedir("/salud"),
