@@ -1,0 +1,16 @@
+{
+  "appId": "com.matcher.app",
+  "appName": "Matcher",
+  "webDir": "webapp/frontend/dist",
+  "android": {
+    "allowMixedContent": false
+  },
+  "ios": {
+    "contentInset": "always"
+  },
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https"
+  },
+  "backgroundColor": "#0a1020"
+}

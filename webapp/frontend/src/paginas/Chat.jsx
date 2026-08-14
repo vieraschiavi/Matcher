@@ -1,0 +1,162 @@
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { api } from "../api";
+
+export default function Chat() {
+  const { id } = useParams();
+  const navegar = useNavigate();
+  const [matches, setMatches] = useState([]);
+  const [mensajes, setMensajes] = useState([]);
+  const [texto, setTexto] = useState("");
+  const [cargando, setCargando] = useState(true);
+  const fin = useRef(null);
+
+  useEffect(() => {
+    api.matches().then((r) => {
+      setMatches(r.matches);
+      setCargando(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!id) {
+      setMensajes([]);
+      return;
+    }
+    api.mensajes(id).then((r) => setMensajes(r.mensajes));
+  }, [id]);
+
+  useEffect(() => {
+    fin.current?.scrollIntoView({ behavior: "smooth" });
+  }, [mensajes]);
+
+  const activo = matches.find((m) => m.id === id);
+
+  const enviar = async (e) => {
+    e.preventDefault();
+    const t = texto.trim();
+    if (!t || !id) return;
+    setTexto("");
+    const r = await api.enviar(id, t);
+    setMensajes((m) => [...m, { ...r.mensaje, mio: true }]);
+  };
+
+  const deshacer = async () => {
+    if (!activo) return;
+    await api.borrarMatch(activo.id);
+    setMatches((m) => m.filter((x) => x.id !== activo.id));
+    navegar("/matches");
+  };
+
+  if (cargando) return <p className="page-sub">Cargando…</p>;
+
+  return (
+    <>
+      <h1 className="page-title">Matches</h1>
+      <p className="page-sub">
+        {matches.length === 0
+          ? "Todavía no tenés matches. Deslizá en Descubrir o probá el match automático."
+          : `${matches.length} conversación${matches.length === 1 ? "" : "es"} abiertas.`}
+      </p>
+
+      <div className="deck-zona" style={{ gridTemplateColumns: "minmax(0, 320px) minmax(0, 1fr)" }}>
+        <div className="panel">
+          <h3>Conversaciones</h3>
+          <div className="chat-lista">
+            {matches.map((m) => (
+              <div
+                key={m.id}
+                className={`chat-fila ${m.id === id ? "activo" : ""}`}
+                onClick={() => navegar(`/matches/${m.id}`)}
+              >
+                <img src={m.con.fotos?.[0]?.url} alt="" />
+                <div className="chat-cuerpo">
+                  <b>
+                    {m.con.nombre}, {m.con.edad}
+                  </b>
+                  <span>
+                    {m.ultimo_mensaje
+                      ? `${m.ultimo_mensaje.mio ? "Vos: " : ""}${m.ultimo_mensaje.texto}`
+                      : m.automatico
+                        ? "Match automático · escribí primero"
+                        : "Se gustaron · escribí primero"}
+                  </span>
+                </div>
+                {m.sin_leer > 0 && <span className="globo">{m.sin_leer}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          {!activo && <p style={{ color: "var(--muted)" }}>Elegí una conversación.</p>}
+          {activo && (
+            <>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  borderBottom: "1px solid var(--line)",
+                  paddingBottom: 12,
+                  marginBottom: 12,
+                }}
+              >
+                <img
+                  src={activo.con.fotos?.[0]?.url}
+                  alt=""
+                  style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover" }}
+                />
+                <div style={{ flex: 1 }}>
+                  <b>
+                    {activo.con.nombre}, {activo.con.edad}
+                  </b>
+                  <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                    <span className="insignia insignia-comp">{activo.compatibilidad}%</span>
+                    {activo.automatico && (
+                      <span className="insignia insignia-auto">⚡ Match automático</span>
+                    )}
+                    {activo.con.sintetico && (
+                      <span className="insignia insignia-sint">Sintético</span>
+                    )}
+                  </div>
+                </div>
+                <button className="btn btn-fantasma" onClick={deshacer}>
+                  Deshacer match
+                </button>
+              </div>
+
+              <div className="burbujas">
+                {mensajes.length === 0 && (
+                  <p style={{ color: "var(--muted)", fontSize: 13 }}>
+                    {activo.automatico
+                      ? "Los emparejó el algoritmo. Nadie deslizó — decilo si querés, funciona bien como apertura."
+                      : "Todavía no se dijeron nada."}
+                  </p>
+                )}
+                {mensajes.map((m) => (
+                  <div key={m.id} className={`burbuja ${m.mio ? "mia" : "suya"}`}>
+                    {m.texto}
+                  </div>
+                ))}
+                <div ref={fin} />
+              </div>
+
+              <form onSubmit={enviar} style={{ display: "flex", gap: 9, marginTop: 12 }}>
+                <input
+                  value={texto}
+                  onChange={(e) => setTexto(e.target.value)}
+                  placeholder={`Escribile a ${activo.con.nombre}…`}
+                  maxLength={2000}
+                />
+                <button className="btn btn-primario" disabled={!texto.trim()}>
+                  Enviar
+                </button>
+              </form>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}

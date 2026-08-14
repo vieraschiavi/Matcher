@@ -1,0 +1,5 @@
+# Backend. Deliberadamente corto: el motor (`matcher/`) usa sólo la biblioteca
+# estándar, así que lo único obligatorio es el servidor HTTP.
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.6

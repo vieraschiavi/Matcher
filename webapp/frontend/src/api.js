@@ -1,0 +1,118 @@
+// Cliente HTTP. Una sola puerta a la API: si cada componente hace su fetch,
+// el manejo del 401 y del 402 (sin cupo) termina copiado en quince lugares y
+// alguno se olvida de alguno.
+
+const BASE = import.meta.env.DEV ? "" : "";
+const LLAVE = "matcher.token";
+
+export const token = {
+  leer: () => localStorage.getItem(LLAVE) || "",
+  guardar: (t) => localStorage.setItem(LLAVE, t),
+  borrar: () => localStorage.removeItem(LLAVE),
+};
+
+// Error con la carga útil del backend adentro. `sinCupo` es la que dispara el
+// muro de pago en la UI, así que necesita viajar entera (recurso + plan).
+export class ErrorApi extends Error {
+  constructor(estado, cuerpo) {
+    super(cuerpo?.detail || `error ${estado}`);
+    this.estado = estado;
+    this.cuerpo = cuerpo || {};
+  }
+  get sinCupo() {
+    return this.estado === 402;
+  }
+  get noAutorizado() {
+    return this.estado === 401;
+  }
+}
+
+async function pedir(ruta, { metodo = "GET", cuerpo } = {}) {
+  const t = token.leer();
+  const res = await fetch(`${BASE}/api${ruta}`, {
+    method: metodo,
+    headers: {
+      ...(cuerpo ? { "Content-Type": "application/json" } : {}),
+      ...(t ? { Authorization: `Bearer ${t}` } : {}),
+    },
+    body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+  });
+  const texto = await res.text();
+  const datos = texto ? JSON.parse(texto) : null;
+  if (!res.ok) {
+    if (res.status === 401) token.borrar();
+    throw new ErrorApi(res.status, datos);
+  }
+  return datos;
+}
+
+export const api = {
+  salud: () => pedir("/salud"),
+  catalogos: () => pedir("/catalogos"),
+  planes: () => pedir("/planes"),
+
+  registro: (datos) => pedir("/registro", { metodo: "POST", cuerpo: datos }),
+  proveedoresLogin: () => pedir("/auth/proveedores"),
+  inicioLogin: (nombre) => pedir(`/auth/${nombre}/inicio`),
+  leerAlta: (token) => pedir(`/auth/alta/${token}`),
+  completarAlta: (datos) => pedir("/auth/completar", { metodo: "POST", cuerpo: datos }),
+  login: (email, clave) => pedir("/login", { metodo: "POST", cuerpo: { email, clave } }),
+  logout: () => pedir("/logout", { metodo: "POST" }),
+  yo: () => pedir("/yo"),
+  editar: (cambio) => pedir("/yo", { metodo: "PATCH", cuerpo: cambio }),
+
+  subirFoto: (url, bytes) => pedir("/yo/fotos", { metodo: "POST", cuerpo: { url, bytes } }),
+  subirVideo: (url, segundos, bytes) =>
+    pedir("/yo/videos", { metodo: "POST", cuerpo: { url, segundos, bytes } }),
+  borrarMedia: (id) => pedir(`/yo/medios/${id}`, { metodo: "DELETE" }),
+  ordenarMedios: (ids) => pedir("/yo/medios/orden", { metodo: "POST", cuerpo: { ids } }),
+
+  deck: (limite = 20) => pedir(`/deck?limite=${limite}`),
+  interactuar: (a_id, tipo) => pedir("/interacciones", { metodo: "POST", cuerpo: { a_id, tipo } }),
+  rebobinar: () => pedir("/rebobinar", { metodo: "POST" }),
+  likesRecibidos: () => pedir("/likes-recibidos"),
+  ranking: (limite = 20) => pedir(`/ranking?limite=${limite}`),
+
+  sugerenciasAuto: () => pedir("/automatch/sugerencias"),
+  correrAuto: () => pedir("/automatch", { metodo: "POST" }),
+
+  matches: () => pedir("/matches"),
+  mensajes: (id) => pedir(`/matches/${id}/mensajes`),
+  enviar: (id, texto) => pedir(`/matches/${id}/mensajes`, { metodo: "POST", cuerpo: { texto } }),
+  borrarMatch: (id) => pedir(`/matches/${id}`, { metodo: "DELETE" }),
+  reportar: (a_id, motivo, detalle = "") =>
+    pedir("/reportes", { metodo: "POST", cuerpo: { a_id, motivo, detalle } }),
+
+  checkout: (plan, periodo) => pedir("/pagos/checkout", { metodo: "POST", cuerpo: { plan, periodo } }),
+  confirmarPago: (referencia) =>
+    pedir("/pagos/confirmar", { metodo: "POST", cuerpo: { referencia } }),
+  cancelarPlan: () => pedir("/pagos/cancelar", { metodo: "POST" }),
+  historialPagos: () => pedir("/pagos"),
+};
+
+// Lee un archivo del selector como data-URI. La demo guarda las fotos así
+// (no hay bucket de objetos todavía); cuando haya storage real, esto pasa a
+// ser un PUT firmado y no cambia nada más de la app.
+export function leerArchivo(archivo) {
+  return new Promise((resolve, reject) => {
+    const lector = new FileReader();
+    lector.onload = () => resolve({ url: lector.result, bytes: archivo.size });
+    lector.onerror = reject;
+    lector.readAsDataURL(archivo);
+  });
+}
+
+// Duración real del video, para poder rechazarlo antes de subirlo y no
+// después de que el usuario esperó la carga entera.
+export function duracionVideo(archivo) {
+  return new Promise((resolve) => {
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.onloadedmetadata = () => {
+      URL.revokeObjectURL(v.src);
+      resolve(v.duration);
+    };
+    v.onerror = () => resolve(null);
+    v.src = URL.createObjectURL(archivo);
+  });
+}

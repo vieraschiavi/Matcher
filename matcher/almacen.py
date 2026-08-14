@@ -1,0 +1,748 @@
+"""Persistencia en SQLite (biblioteca estándar) y reglas de interacción.
+
+Por qué SQLite y no un ORM: el motor tiene que poder correr desde un test,
+desde el backend y desde un `.bat` sin instalar nada. Un solo archivo `.db`
+también hace que la demo sea reproducible — se borra el archivo y se vuelve al
+estado inicial.
+
+El perfil se guarda como JSON en una columna y sólo se indexan `id` y `email`.
+Es deliberado: el esquema del perfil todavía se mueve, y migrar columnas en
+cada cambio de producto costaría más de lo que ahorra. Las consultas que
+importan (deck, matches, cupos) van por tablas relacionales de verdad.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import uuid
+from collections.abc import Iterable
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+from . import filtros, planes, scoring, seguridad
+from .modelos import (
+    DatosInvalidos,
+    Match,
+    Media,
+    Mensaje,
+    Perfil,
+    Preferencias,
+)
+
+ESQUEMA = """
+CREATE TABLE IF NOT EXISTS perfiles (
+    id          TEXT PRIMARY KEY,
+    email       TEXT NOT NULL UNIQUE,
+    clave_hash  TEXT NOT NULL,
+    datos       TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS interacciones (
+    id      TEXT PRIMARY KEY,
+    de_id   TEXT NOT NULL,
+    a_id    TEXT NOT NULL,
+    tipo    TEXT NOT NULL,
+    momento TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_int_de   ON interacciones(de_id, momento);
+CREATE INDEX IF NOT EXISTS ix_int_a    ON interacciones(a_id, tipo);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_int_par ON interacciones(de_id, a_id);
+CREATE TABLE IF NOT EXISTS matches (
+    id             TEXT PRIMARY KEY,
+    a_id           TEXT NOT NULL,
+    b_id           TEXT NOT NULL,
+    momento        TEXT NOT NULL,
+    automatico     INTEGER NOT NULL DEFAULT 0,
+    compatibilidad REAL NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_match_par ON matches(a_id, b_id);
+CREATE TABLE IF NOT EXISTS mensajes (
+    id       TEXT PRIMARY KEY,
+    match_id TEXT NOT NULL,
+    de_id    TEXT NOT NULL,
+    texto    TEXT NOT NULL,
+    momento  TEXT NOT NULL,
+    leido    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_msg_match ON mensajes(match_id, momento);
+CREATE TABLE IF NOT EXISTS pagos (
+    id         TEXT PRIMARY KEY,
+    usuario_id TEXT NOT NULL,
+    plan       TEXT NOT NULL,
+    periodo    TEXT NOT NULL,
+    monto      REAL NOT NULL,
+    moneda     TEXT NOT NULL,
+    estado     TEXT NOT NULL,
+    pasarela   TEXT NOT NULL,
+    referencia TEXT NOT NULL,
+    momento    TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sesiones (
+    token      TEXT PRIMARY KEY,
+    usuario_id TEXT NOT NULL,
+    creado     TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS reportes (
+    id         TEXT PRIMARY KEY,
+    de_id      TEXT NOT NULL,
+    a_id       TEXT NOT NULL,
+    motivo     TEXT NOT NULL,
+    detalle    TEXT NOT NULL DEFAULT '',
+    momento    TEXT NOT NULL
+);
+-- Login con Google: qué proveedor usó cada cuenta. Se guarda aparte del perfil
+-- porque una misma cuenta puede sumar más de un proveedor con el tiempo.
+CREATE TABLE IF NOT EXISTS identidades (
+    proveedor  TEXT NOT NULL,
+    email      TEXT NOT NULL,
+    usuario_id TEXT NOT NULL,
+    creado     TEXT NOT NULL,
+    PRIMARY KEY (proveedor, email)
+);
+-- Alta a medio hacer: el proveedor ya confirmó el email, pero todavía faltan
+-- los datos que sólo puede dar la persona (nacimiento, género, ciudad…). Se
+-- guarda acá y no como perfil incompleto: un perfil a medias entra a consultas
+-- que no lo esperan y ensucia el deck.
+CREATE TABLE IF NOT EXISTS altas_pendientes (
+    token     TEXT PRIMARY KEY,
+    proveedor TEXT NOT NULL,
+    email     TEXT NOT NULL,
+    nombre    TEXT NOT NULL DEFAULT '',
+    foto      TEXT NOT NULL DEFAULT '',
+    creado    TEXT NOT NULL
+);
+"""
+
+# Un alta a medio hacer no puede quedar viva para siempre: es un email
+# verificado esperando a que alguien lo reclame.
+VIDA_ALTA_PENDIENTE = timedelta(hours=2)
+
+
+def _iso(dt: datetime | None) -> str | None:
+    return dt.isoformat() if dt else None
+
+
+def _dt(texto: str | None) -> datetime | None:
+    return datetime.fromisoformat(texto) if texto else None
+
+
+class SinCupo(Exception):
+    """Se acabó el cupo del plan. La API lo traduce a HTTP 402 con el detalle
+    de qué plan lo destraba — es el momento exacto donde se vende."""
+
+    def __init__(self, mensaje: str, recurso: str, plan_sugerido: str = "plus"):
+        super().__init__(mensaje)
+        self.recurso = recurso
+        self.plan_sugerido = plan_sugerido
+
+
+class Almacen:
+    def __init__(self, ruta: str | Path = ":memory:"):
+        self.ruta = str(ruta)
+        if self.ruta != ":memory:":
+            Path(self.ruta).parent.mkdir(parents=True, exist_ok=True)
+        self.con = sqlite3.connect(self.ruta, check_same_thread=False)
+        self.con.row_factory = sqlite3.Row
+        self.con.executescript(ESQUEMA)
+        self.con.commit()
+
+    def cerrar(self) -> None:
+        self.con.close()
+
+    # ------------------------------------------------------------------
+    # Serialización de perfiles
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _a_json(p: Perfil) -> str:
+        return json.dumps(
+            {
+                "id": p.id,
+                "email": p.email,
+                "nombre": p.nombre,
+                "nacimiento": p.nacimiento.isoformat(),
+                "genero": p.genero,
+                "altura_cm": p.altura_cm,
+                "pais": p.pais,
+                "ciudad": p.ciudad,
+                "politica": p.politica,
+                "equipo": p.equipo,
+                "bio": p.bio,
+                "intereses": p.intereses,
+                "fotos": [m.a_dict() for m in p.fotos],
+                "videos": [m.a_dict() for m in p.videos],
+                "preferencias": p.preferencias.a_dict(),
+                "plan": p.plan,
+                "plan_vence": _iso(p.plan_vence),
+                "verificado": p.verificado,
+                "activo": p.activo,
+                "sintetico": p.sintetico,
+                "creado": _iso(p.creado),
+                "ultima_actividad": _iso(p.ultima_actividad),
+                "likes_recibidos": p.likes_recibidos,
+                "superfans_recibidos": p.superfans_recibidos,
+                "vistas_recibidas": p.vistas_recibidas,
+            },
+            ensure_ascii=False,
+        )
+
+    @staticmethod
+    def _desde_json(texto: str) -> Perfil:
+        d = json.loads(texto)
+        return Perfil(
+            id=d["id"],
+            email=d["email"],
+            nombre=d["nombre"],
+            nacimiento=date.fromisoformat(d["nacimiento"]),
+            genero=d["genero"],
+            altura_cm=int(d["altura_cm"]),
+            pais=d["pais"],
+            ciudad=d["ciudad"],
+            politica=d.get("politica", "neutro"),
+            equipo=d.get("equipo", ""),
+            bio=d.get("bio", ""),
+            intereses=list(d.get("intereses") or []),
+            fotos=[Media.desde_dict(m) for m in d.get("fotos") or []],
+            videos=[Media.desde_dict(m) for m in d.get("videos") or []],
+            preferencias=Preferencias.desde_dict(d.get("preferencias")),
+            plan=d.get("plan", "gratis"),
+            plan_vence=_dt(d.get("plan_vence")),
+            verificado=bool(d.get("verificado", False)),
+            activo=bool(d.get("activo", True)),
+            sintetico=bool(d.get("sintetico", False)),
+            creado=_dt(d.get("creado")) or datetime.utcnow(),
+            ultima_actividad=_dt(d.get("ultima_actividad")) or datetime.utcnow(),
+            likes_recibidos=int(d.get("likes_recibidos", 0)),
+            superfans_recibidos=int(d.get("superfans_recibidos", 0)),
+            vistas_recibidas=int(d.get("vistas_recibidas", 0)),
+        )
+
+    # ------------------------------------------------------------------
+    # Alta y lectura de perfiles
+    # ------------------------------------------------------------------
+    def crear_perfil(self, perfil: Perfil, clave: str) -> Perfil:
+        perfil.email = perfil.email.strip().lower()
+        perfil.validar()
+        if self.buscar_por_email(perfil.email):
+            raise DatosInvalidos("ya existe una cuenta con ese email")
+        self.con.execute(
+            "INSERT INTO perfiles (id, email, clave_hash, datos) VALUES (?,?,?,?)",
+            (perfil.id, perfil.email, seguridad.hashear(clave), self._a_json(perfil)),
+        )
+        self.con.commit()
+        return perfil
+
+    def guardar_perfil(self, perfil: Perfil) -> Perfil:
+        perfil.validar()
+        cur = self.con.execute(
+            "UPDATE perfiles SET email = ?, datos = ? WHERE id = ?",
+            (perfil.email.strip().lower(), self._a_json(perfil), perfil.id),
+        )
+        if cur.rowcount == 0:
+            raise DatosInvalidos(f"no existe el perfil {perfil.id}")
+        self.con.commit()
+        return perfil
+
+    def perfil(self, id_: str) -> Perfil | None:
+        fila = self.con.execute("SELECT datos FROM perfiles WHERE id = ?", (id_,)).fetchone()
+        return self._desde_json(fila["datos"]) if fila else None
+
+    def buscar_por_email(self, email: str) -> Perfil | None:
+        fila = self.con.execute(
+            "SELECT datos FROM perfiles WHERE email = ?", (email.strip().lower(),)
+        ).fetchone()
+        return self._desde_json(fila["datos"]) if fila else None
+
+    def todos(self, incluir_inactivos: bool = False) -> list[Perfil]:
+        filas = self.con.execute("SELECT datos FROM perfiles").fetchall()
+        perfiles = [self._desde_json(f["datos"]) for f in filas]
+        return perfiles if incluir_inactivos else [p for p in perfiles if p.activo]
+
+    def cambiar_clave(self, id_: str, nueva: str) -> None:
+        self.con.execute(
+            "UPDATE perfiles SET clave_hash = ? WHERE id = ?", (seguridad.hashear(nueva), id_)
+        )
+        self.con.commit()
+
+    # ------------------------------------------------------------------
+    # Sesiones
+    # ------------------------------------------------------------------
+    def login(self, email: str, clave: str) -> tuple[Perfil, str] | None:
+        fila = self.con.execute(
+            "SELECT id, clave_hash, datos FROM perfiles WHERE email = ?",
+            (email.strip().lower(),),
+        ).fetchone()
+        if not fila or not seguridad.verificar(clave, fila["clave_hash"]):
+            return None
+        perfil = self._desde_json(fila["datos"])
+        if not perfil.activo:
+            return None
+        token = seguridad.nuevo_token()
+        self.con.execute(
+            "INSERT INTO sesiones (token, usuario_id, creado) VALUES (?,?,?)",
+            (token, perfil.id, datetime.utcnow().isoformat()),
+        )
+        self.con.commit()
+        self.tocar(perfil.id)
+        return perfil, token
+
+    def abrir_sesion(self, perfil: Perfil) -> str:
+        """Emite un token sin pedir contraseña.
+
+        La usa el login con proveedor externo: ahí quien verificó la identidad
+        es Google, no nosotros. No la expongas por HTTP sin esa verificación
+        previa — sería un login sin credenciales.
+        """
+        token = seguridad.nuevo_token()
+        self.con.execute(
+            "INSERT INTO sesiones (token, usuario_id, creado) VALUES (?,?,?)",
+            (token, perfil.id, datetime.utcnow().isoformat()),
+        )
+        self.con.commit()
+        self.tocar(perfil.id)
+        return token
+
+    # -- login con proveedor externo ------------------------------------
+    def vincular_identidad(self, proveedor: str, email: str, usuario_id: str) -> None:
+        self.con.execute(
+            "INSERT OR REPLACE INTO identidades (proveedor, email, usuario_id, creado) "
+            "VALUES (?,?,?,?)",
+            (proveedor, email.strip().lower(), usuario_id, datetime.utcnow().isoformat()),
+        )
+        self.con.commit()
+
+    def proveedores_de(self, usuario_id: str) -> list[str]:
+        filas = self.con.execute(
+            "SELECT proveedor FROM identidades WHERE usuario_id = ?", (usuario_id,)
+        ).fetchall()
+        return [f["proveedor"] for f in filas]
+
+    def guardar_alta_pendiente(self, proveedor: str, email: str, nombre: str, foto: str) -> str:
+        """Guarda un email ya verificado por el proveedor, a la espera de que la
+        persona complete los datos que faltan. Devuelve el token del alta."""
+        self.con.execute(
+            "DELETE FROM altas_pendientes WHERE creado < ?",
+            ((datetime.utcnow() - VIDA_ALTA_PENDIENTE).isoformat(),),
+        )
+        token = seguridad.nuevo_token()
+        self.con.execute(
+            "INSERT INTO altas_pendientes (token, proveedor, email, nombre, foto, creado) "
+            "VALUES (?,?,?,?,?,?)",
+            (token, proveedor, email.strip().lower(), nombre, foto,
+             datetime.utcnow().isoformat()),
+        )
+        self.con.commit()
+        return token
+
+    def leer_alta_pendiente(self, token: str, consumir: bool = False) -> dict | None:
+        fila = self.con.execute(
+            "SELECT * FROM altas_pendientes WHERE token = ?", (token,)
+        ).fetchone()
+        if not fila:
+            return None
+        if _dt(fila["creado"]) < datetime.utcnow() - VIDA_ALTA_PENDIENTE:
+            self.con.execute("DELETE FROM altas_pendientes WHERE token = ?", (token,))
+            self.con.commit()
+            return None
+        if consumir:
+            self.con.execute("DELETE FROM altas_pendientes WHERE token = ?", (token,))
+            self.con.commit()
+        return dict(fila)
+
+    def por_token(self, token: str) -> Perfil | None:
+        fila = self.con.execute(
+            "SELECT usuario_id FROM sesiones WHERE token = ?", (token,)
+        ).fetchone()
+        return self.perfil(fila["usuario_id"]) if fila else None
+
+    def logout(self, token: str) -> None:
+        self.con.execute("DELETE FROM sesiones WHERE token = ?", (token,))
+        self.con.commit()
+
+    def tocar(self, id_: str) -> None:
+        """Marca actividad reciente. Alimenta `scoring.actividad`."""
+        p = self.perfil(id_)
+        if p:
+            p.ultima_actividad = datetime.utcnow()
+            self.con.execute(
+                "UPDATE perfiles SET datos = ? WHERE id = ?", (self._a_json(p), p.id)
+            )
+            self.con.commit()
+
+    # ------------------------------------------------------------------
+    # Cupos
+    # ------------------------------------------------------------------
+    def _contar_desde(self, de_id: str, tipos: Iterable[str], desde: datetime) -> int:
+        marcas = ",".join("?" for _ in tipos)
+        fila = self.con.execute(
+            f"SELECT COUNT(*) c FROM interacciones "
+            f"WHERE de_id = ? AND tipo IN ({marcas}) AND momento >= ?",
+            (de_id, *tipos, desde.isoformat()),
+        ).fetchone()
+        return fila["c"]
+
+    def cupos(self, perfil: Perfil, ahora: datetime | None = None) -> dict:
+        ahora = ahora or datetime.utcnow()
+        lim = planes.limites_de(perfil)
+        inicio_dia = datetime(ahora.year, ahora.month, ahora.day)
+        inicio_semana = inicio_dia - timedelta(days=inicio_dia.weekday())
+        likes_hoy = self._contar_desde(perfil.id, ("like",), inicio_dia)
+        superfans_semana = self._contar_desde(perfil.id, ("superfan",), inicio_semana)
+        automatch_hoy = self.con.execute(
+            "SELECT COUNT(*) c FROM matches "
+            "WHERE automatico = 1 AND (a_id = ? OR b_id = ?) AND momento >= ?",
+            (perfil.id, perfil.id, inicio_dia.isoformat()),
+        ).fetchone()["c"]
+        return {
+            "plan": perfil.plan if perfil.es_premium else "gratis",
+            "likes_hoy": likes_hoy,
+            "likes_max": lim.likes_por_dia,
+            "likes_restantes": (
+                None if lim.likes_por_dia is None else max(0, lim.likes_por_dia - likes_hoy)
+            ),
+            "superfans_semana": superfans_semana,
+            "superfans_max": lim.superfans_por_semana,
+            "superfans_restantes": max(0, lim.superfans_por_semana - superfans_semana),
+            "automatch_hoy": automatch_hoy,
+            "automatch_max": lim.automatch_por_dia,
+            "ver_quien_me_dio_like": lim.ver_quien_me_dio_like,
+            "rebobinar": lim.rebobinar,
+            "modo_incognito": lim.modo_incognito,
+        }
+
+    # ------------------------------------------------------------------
+    # Deck
+    # ------------------------------------------------------------------
+    def vistos_por(self, id_: str) -> set[str]:
+        filas = self.con.execute(
+            "SELECT a_id FROM interacciones WHERE de_id = ?", (id_,)
+        ).fetchall()
+        return {f["a_id"] for f in filas}
+
+    def deck(self, perfil: Perfil, limite: int = 20, *, ahora: datetime | None = None) -> dict:
+        universo = [p for p in self.todos() if p.id != perfil.id]
+        vistos = self.vistos_por(perfil.id)
+        elegibles = filtros.candidatos(perfil, universo, vistos=vistos)
+        puntuados = scoring.ordenar_deck(perfil, elegibles, ahora=ahora)[:limite]
+        por_id = {p.id: p for p in elegibles}
+        tarjetas = []
+        for fila in puntuados:
+            otro = por_id[fila["id"]]
+            tarjetas.append(otro.a_dict() | {
+                "compatibilidad": fila["compatibilidad"],
+                "popularidad": fila["popularidad"],
+                "distancia_km": fila["distancia_km"],
+                "motivos": fila["motivos"],
+                "ola": fila["ola"],
+            })
+        # Contar la vista acá y no en el cliente: si la cuenta el frontend, un
+        # scroll rápido infla las vistas y hunde la popularidad de todos.
+        self._sumar_vistas([t["id"] for t in tarjetas])
+        salida = {"tarjetas": tarjetas, "cupos": self.cupos(perfil, ahora)}
+        if not tarjetas:
+            salida["diagnostico"] = filtros.diagnostico(perfil, universo, vistos=vistos)
+        return salida
+
+    def _sumar_vistas(self, ids: list[str]) -> None:
+        for id_ in ids:
+            p = self.perfil(id_)
+            if p:
+                p.vistas_recibidas += 1
+                self.con.execute(
+                    "UPDATE perfiles SET datos = ? WHERE id = ?", (self._a_json(p), p.id)
+                )
+        self.con.commit()
+
+    # ------------------------------------------------------------------
+    # Interacciones
+    # ------------------------------------------------------------------
+    def interactuar(
+        self, de: Perfil, a_id: str, tipo: str, *, ahora: datetime | None = None
+    ) -> dict:
+        """Registra un like / superfan / pass y crea el match si es recíproco.
+
+        Devuelve `{"match": bool, ...}`. El chequeo de cupo va ANTES de tocar
+        la base: si se registra la interacción y después falla el cupo, el
+        perfil queda quemado (no vuelve a aparecer) sin que el like exista.
+        """
+        ahora = ahora or datetime.utcnow()
+        if tipo not in ("like", "superfan", "pass"):
+            raise DatosInvalidos(f"tipo de interacción desconocido: {tipo}")
+        destino = self.perfil(a_id)
+        if not destino:
+            raise DatosInvalidos("ese perfil no existe")
+        if a_id == de.id:
+            raise DatosInvalidos("no podés interactuar con tu propio perfil")
+
+        ya = self.con.execute(
+            "SELECT tipo FROM interacciones WHERE de_id = ? AND a_id = ?", (de.id, a_id)
+        ).fetchone()
+        if ya:
+            raise DatosInvalidos("ya interactuaste con ese perfil")
+
+        cupos = self.cupos(de, ahora)
+        if tipo == "like" and cupos["likes_restantes"] == 0:
+            raise SinCupo(
+                "Se te acabaron los likes de hoy. Con Plus son ilimitados.",
+                "likes",
+                "plus",
+            )
+        if tipo == "superfan" and cupos["superfans_restantes"] == 0:
+            raise SinCupo(
+                "Se te acabaron los superfans de la semana.", "superfans", "plus"
+            )
+
+        self.con.execute(
+            "INSERT INTO interacciones (id, de_id, a_id, tipo, momento) VALUES (?,?,?,?,?)",
+            (uuid.uuid4().hex[:16], de.id, a_id, tipo, ahora.isoformat()),
+        )
+
+        if tipo in ("like", "superfan"):
+            if tipo == "like":
+                destino.likes_recibidos += 1
+            else:
+                destino.superfans_recibidos += 1
+            self.con.execute(
+                "UPDATE perfiles SET datos = ? WHERE id = ?",
+                (self._a_json(destino), destino.id),
+            )
+        self.con.commit()
+
+        if tipo == "pass":
+            return {"match": False, "cupos": self.cupos(de, ahora)}
+
+        reciproco = self.con.execute(
+            "SELECT tipo FROM interacciones WHERE de_id = ? AND a_id = ? AND tipo IN "
+            "('like','superfan')",
+            (a_id, de.id),
+        ).fetchone()
+        if not reciproco:
+            return {"match": False, "cupos": self.cupos(de, ahora)}
+
+        comp, _ = scoring.compatibilidad(de, destino)
+        m = self._crear_match(de.id, a_id, automatico=False, compatibilidad=comp, ahora=ahora)
+        return {
+            "match": True,
+            "match_id": m.id,
+            "con": destino.a_dict(),
+            "compatibilidad": comp,
+            "cupos": self.cupos(de, ahora),
+        }
+
+    def rebobinar(self, perfil: Perfil) -> dict:
+        """Deshace el último descarte. Es función paga — es el gancho más
+        vendido de la categoría y no cuesta nada implementarlo bien."""
+        if not planes.limites_de(perfil).rebobinar:
+            raise SinCupo("Rebobinar es de Plus en adelante.", "rebobinar", "plus")
+        fila = self.con.execute(
+            "SELECT id, a_id FROM interacciones WHERE de_id = ? ORDER BY momento DESC LIMIT 1",
+            (perfil.id,),
+        ).fetchone()
+        if not fila:
+            return {"deshecho": False}
+        self.con.execute("DELETE FROM interacciones WHERE id = ?", (fila["id"],))
+        self.con.commit()
+        return {"deshecho": True, "perfil_id": fila["a_id"]}
+
+    def quien_me_dio_like(self, perfil: Perfil) -> dict:
+        """En gratis devuelve sólo el conteo y las tarjetas borroneadas. Se
+        decide en el servidor: mandar los perfiles completos y esconderlos con
+        CSS es la fuga clásica de este feature."""
+        filas = self.con.execute(
+            "SELECT de_id, tipo FROM interacciones WHERE a_id = ? AND tipo IN "
+            "('like','superfan') ORDER BY momento DESC",
+            (perfil.id,),
+        ).fetchall()
+        ya_respondidos = self.vistos_por(perfil.id)
+        pendientes = [f for f in filas if f["de_id"] not in ya_respondidos]
+        if not planes.limites_de(perfil).ver_quien_me_dio_like:
+            return {
+                "visible": False,
+                "cantidad": len(pendientes),
+                "plan_sugerido": "plus",
+                "perfiles": [],
+            }
+        perfiles = []
+        for f in pendientes:
+            otro = self.perfil(f["de_id"])
+            if otro and otro.activo:
+                comp, _ = scoring.compatibilidad(perfil, otro)
+                perfiles.append(otro.a_dict() | {"tipo": f["tipo"], "compatibilidad": comp})
+        return {"visible": True, "cantidad": len(perfiles), "perfiles": perfiles}
+
+    # ------------------------------------------------------------------
+    # Matches y chat
+    # ------------------------------------------------------------------
+    def _crear_match(
+        self,
+        a: str,
+        b: str,
+        *,
+        automatico: bool,
+        compatibilidad: float,
+        ahora: datetime | None = None,
+    ) -> Match:
+        # Par ordenado: sin esto el mismo match entra dos veces (A,B) y (B,A).
+        a, b = sorted([a, b])
+        existe = self.con.execute(
+            "SELECT * FROM matches WHERE a_id = ? AND b_id = ?", (a, b)
+        ).fetchone()
+        if existe:
+            return Match(
+                id=existe["id"],
+                a_id=existe["a_id"],
+                b_id=existe["b_id"],
+                momento=_dt(existe["momento"]),
+                automatico=bool(existe["automatico"]),
+                compatibilidad=existe["compatibilidad"],
+            )
+        m = Match(
+            id=uuid.uuid4().hex[:16],
+            a_id=a,
+            b_id=b,
+            momento=ahora or datetime.utcnow(),
+            automatico=automatico,
+            compatibilidad=compatibilidad,
+        )
+        self.con.execute(
+            "INSERT INTO matches (id, a_id, b_id, momento, automatico, compatibilidad) "
+            "VALUES (?,?,?,?,?,?)",
+            (m.id, m.a_id, m.b_id, m.momento.isoformat(), int(m.automatico), m.compatibilidad),
+        )
+        self.con.commit()
+        return m
+
+    def matches_de(self, id_: str) -> list[dict]:
+        filas = self.con.execute(
+            "SELECT * FROM matches WHERE a_id = ? OR b_id = ? ORDER BY momento DESC",
+            (id_, id_),
+        ).fetchall()
+        salida = []
+        for f in filas:
+            otro_id = f["b_id"] if f["a_id"] == id_ else f["a_id"]
+            otro = self.perfil(otro_id)
+            if not otro or not otro.activo:
+                continue
+            ultimo = self.con.execute(
+                "SELECT texto, momento, de_id FROM mensajes WHERE match_id = ? "
+                "ORDER BY momento DESC LIMIT 1",
+                (f["id"],),
+            ).fetchone()
+            sin_leer = self.con.execute(
+                "SELECT COUNT(*) c FROM mensajes WHERE match_id = ? AND de_id != ? AND leido = 0",
+                (f["id"], id_),
+            ).fetchone()["c"]
+            salida.append(
+                {
+                    "id": f["id"],
+                    "momento": f["momento"],
+                    "automatico": bool(f["automatico"]),
+                    "compatibilidad": f["compatibilidad"],
+                    "con": otro.a_dict(),
+                    "ultimo_mensaje": (
+                        {"texto": ultimo["texto"], "momento": ultimo["momento"],
+                         "mio": ultimo["de_id"] == id_}
+                        if ultimo
+                        else None
+                    ),
+                    "sin_leer": sin_leer,
+                }
+            )
+        return salida
+
+    def _match_de(self, match_id: str, id_usuario: str) -> sqlite3.Row:
+        fila = self.con.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
+        if not fila or id_usuario not in (fila["a_id"], fila["b_id"]):
+            raise DatosInvalidos("ese match no existe o no es tuyo")
+        return fila
+
+    def enviar_mensaje(self, match_id: str, de: Perfil, texto: str) -> Mensaje:
+        self._match_de(match_id, de.id)
+        texto = (texto or "").strip()
+        if not texto:
+            raise DatosInvalidos("el mensaje está vacío")
+        if len(texto) > 2000:
+            raise DatosInvalidos("el mensaje es demasiado largo (máximo 2000 caracteres)")
+        m = Mensaje(id=uuid.uuid4().hex[:16], match_id=match_id, de_id=de.id, texto=texto)
+        self.con.execute(
+            "INSERT INTO mensajes (id, match_id, de_id, texto, momento, leido) VALUES (?,?,?,?,?,0)",
+            (m.id, m.match_id, m.de_id, m.texto, m.momento.isoformat()),
+        )
+        self.con.commit()
+        return m
+
+    def conversacion(self, match_id: str, de: Perfil) -> list[dict]:
+        self._match_de(match_id, de.id)
+        filas = self.con.execute(
+            "SELECT * FROM mensajes WHERE match_id = ? ORDER BY momento", (match_id,)
+        ).fetchall()
+        self.con.execute(
+            "UPDATE mensajes SET leido = 1 WHERE match_id = ? AND de_id != ?",
+            (match_id, de.id),
+        )
+        self.con.commit()
+        return [
+            {
+                "id": f["id"],
+                "de_id": f["de_id"],
+                "mio": f["de_id"] == de.id,
+                "texto": f["texto"],
+                "momento": f["momento"],
+            }
+            for f in filas
+        ]
+
+    def deshacer_match(self, match_id: str, de: Perfil) -> None:
+        self._match_de(match_id, de.id)
+        self.con.execute("DELETE FROM mensajes WHERE match_id = ?", (match_id,))
+        self.con.execute("DELETE FROM matches WHERE id = ?", (match_id,))
+        self.con.commit()
+
+    # ------------------------------------------------------------------
+    # Reportes y bloqueos
+    # ------------------------------------------------------------------
+    def reportar(self, de: Perfil, a_id: str, motivo: str, detalle: str = "") -> None:
+        """Reportar también descarta: nadie quiere volver a cruzarse con quien
+        acaba de reportar. El `INSERT OR IGNORE` cubre el caso de haber pasado
+        antes por ese perfil."""
+        self.con.execute(
+            "INSERT INTO reportes (id, de_id, a_id, motivo, detalle, momento) VALUES (?,?,?,?,?,?)",
+            (uuid.uuid4().hex[:16], de.id, a_id, motivo, detalle, datetime.utcnow().isoformat()),
+        )
+        self.con.execute(
+            "INSERT OR IGNORE INTO interacciones (id, de_id, a_id, tipo, momento) "
+            "VALUES (?,?,?,'pass',?)",
+            (uuid.uuid4().hex[:16], de.id, a_id, datetime.utcnow().isoformat()),
+        )
+        self.con.commit()
+
+    # ------------------------------------------------------------------
+    # Pagos
+    # ------------------------------------------------------------------
+    def registrar_pago(
+        self,
+        usuario_id: str,
+        plan: str,
+        periodo: str,
+        monto: float,
+        moneda: str,
+        estado: str,
+        pasarela: str,
+        referencia: str,
+    ) -> str:
+        id_ = uuid.uuid4().hex[:16]
+        self.con.execute(
+            "INSERT INTO pagos (id, usuario_id, plan, periodo, monto, moneda, estado, "
+            "pasarela, referencia, momento) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (
+                id_, usuario_id, plan, periodo, monto, moneda, estado, pasarela,
+                referencia, datetime.utcnow().isoformat(),
+            ),
+        )
+        self.con.commit()
+        return id_
+
+    def pagos_de(self, usuario_id: str) -> list[dict]:
+        filas = self.con.execute(
+            "SELECT * FROM pagos WHERE usuario_id = ? ORDER BY momento DESC", (usuario_id,)
+        ).fetchall()
+        return [dict(f) for f in filas]
