@@ -216,6 +216,44 @@ button { font-family: inherit; }
 .radar-punto-borde { fill: none; stroke: #fff; stroke-width: 2; }
 .radar-punto-cruce { fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 3 3; }
 
+/* ---- mapa (dónde está la gente que encontró el radar) ---- */
+.mapa {
+  position: relative; width: 100%; overflow: hidden;
+  border-radius: var(--r-medio); background: var(--navy-950);
+  border: 1px solid var(--line); touch-action: pan-y;
+}
+.mapa-tiles { position: absolute; inset: 0; }
+/* Los tiles de OSM son claros y la app es oscura. Bajarles el brillo y
+   desaturarlos los mete en la paleta sin tener que pagar un estilo oscuro. */
+.mapa-tiles img {
+  position: absolute; width: 256px; height: 256px; display: block;
+  filter: grayscale(.7) invert(.92) hue-rotate(185deg) brightness(.92) contrast(.9);
+}
+.mapa-capa { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.mapa-anillo { fill: none; stroke: rgba(255, 255, 255, .22); stroke-width: 1; stroke-dasharray: 3 4; }
+.mapa-etiqueta { fill: rgba(255, 255, 255, .5); font-size: 10.5px; font-family: var(--sans); }
+.mapa-privacidad { fill: rgba(255, 77, 109, .14); stroke: rgba(255, 77, 109, .5); stroke-width: 1; }
+.mapa-yo { fill: var(--coral); stroke: #fff; stroke-width: 2.5; }
+.mapa-cruce { fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 3 3; }
+.mapa-pin {
+  position: absolute; width: 34px; height: 34px; padding: 0; margin: -17px 0 0 -17px;
+  border-radius: 50%; border: 2px solid #fff; background: var(--navy-800);
+  cursor: pointer; overflow: hidden; box-shadow: var(--sombra-2);
+  transition: transform .18s var(--resorte), border-color .18s ease;
+}
+.mapa-pin img { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; display: block; }
+.mapa-pin:hover { transform: scale(1.16); z-index: 3; }
+.mapa-pin.on { border-color: var(--coral); transform: scale(1.2); z-index: 4; }
+.mapa-pin.cruzado { border-color: var(--amber); }
+.mapa-pie {
+  position: absolute; right: 6px; bottom: 5px; font-size: 9.5px; color: rgba(255, 255, 255, .5);
+  background: rgba(0, 0, 0, .45); padding: 2px 6px; border-radius: var(--r-chico);
+}
+.mapa-vacio {
+  display: grid; place-items: center; border-radius: var(--r-medio);
+  background: var(--navy-900); border: 1px solid var(--line); color: var(--muted); font-size: 13px;
+}
+
 /* ---- deck de citas ---- */
 .deck-zona {
   display: grid; grid-template-columns: minmax(0, 420px) minmax(260px, 1fr);

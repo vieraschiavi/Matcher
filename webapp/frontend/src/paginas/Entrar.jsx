@@ -25,7 +25,7 @@ const CUENTAS_DEMO = [
 const CLAVE_DEMO = "matcher2026";
 
 export default function Entrar() {
-  const { entrar, entrarConToken, registrar, catalogos } = useApp();
+  const { entrar, entrarConToken, registrar, catalogos, sesionCaida } = useApp();
   const [params] = useSearchParams();
   const [pestana, setPestana] = useState("entrar");
   const [error, setError] = useState("");
@@ -141,6 +141,12 @@ export default function Entrar() {
           <h1>Matcher</h1>
           <p>Filtrá por lo que de verdad te importa. Todos los filtros, gratis.</p>
         </div>
+
+        {sesionCaida && (
+          <div className="aviso aviso-info" style={{ marginBottom: 14 }}>
+            Se cerró tu sesión y hay que entrar de nuevo. Tus datos están intactos.
+          </div>
+        )}
 
         <div className="panel">
           {proveedores.length > 0 && (

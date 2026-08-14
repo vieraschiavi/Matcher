@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
 import { IcoCorazon, IcoPin, IcoRayo, IcoVerificado } from "../Iconos";
+import Mapa from "../componentes/Mapa";
 
 // Radar en SVG, no un mapa de verdad: no hay tiles sin salir a internet desde
 // el APK y sin clave de un proveedor de mapas. Lo que sí importa —cuánta
@@ -27,6 +28,7 @@ export default function Radar() {
   const [seleccion, setSeleccion] = useState(null);
   const [permiso, setPermiso] = useState("pendiente"); // pendiente | ok | negado
   const [fallo, setFallo] = useState("");
+  const [vista, setVista] = useState("mapa");
   const [pulso, setPulso] = useState(0);
   const intervalo = useRef(null);
 
@@ -144,7 +146,34 @@ export default function Radar() {
 
             {cargando && <p style={{ color: "var(--muted)" }}>Ubicándote…</p>}
 
+            {/* Mapa o radar. El mapa contesta "¿dónde?" y el radar "¿a qué
+                distancia y para qué lado?" — son dos preguntas distintas y
+                cada una se lee mejor en su dibujo, así que van las dos. */}
             {!cargando && (
+              <div className="pestanas" style={{ marginBottom: 12 }}>
+                <button className={vista === "mapa" ? "on" : ""} onClick={() => setVista("mapa")}>
+                  Mapa
+                </button>
+                <button className={vista === "radar" ? "on" : ""} onClick={() => setVista("radar")}>
+                  Radar
+                </button>
+              </div>
+            )}
+
+            {!cargando && vista === "mapa" && (
+              <Mapa
+                centro={datos?.centro}
+                personas={datos?.personas || []}
+                cruces={cruces?.personas || []}
+                radioKm={radioKm}
+                precisionM={datos?.precision_m || 500}
+                anillosKm={anillos}
+                seleccion={seleccion}
+                onElegir={setSeleccion}
+              />
+            )}
+
+            {!cargando && vista === "radar" && (
               <svg viewBox={`0 0 ${LADO} ${LADO}`} className="radar-svg" role="img" aria-label="Radar de gente cerca">
                 <circle cx={CENTRO} cy={CENTRO} r={RADIO_MAX} className="radar-fondo" />
                 {anillos.map((km, i) => (

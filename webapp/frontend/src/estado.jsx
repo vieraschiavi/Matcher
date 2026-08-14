@@ -11,6 +11,7 @@ export function Proveedor({ children }) {
   const [cupos, setCupos] = useState(null);
   const [catalogos, setCatalogos] = useState(null);
   const [cargando, setCargando] = useState(true);
+  const [sesionCaida, setSesionCaida] = useState(false);
 
   const refrescar = useCallback(async () => {
     if (!token.leer()) {
@@ -45,6 +46,10 @@ export function Proveedor({ children }) {
       setPerfil(null);
       setCupos(null);
       setCargando(false);
+      // Sin este cartel, volver al login de golpe parece que la app se
+      // reinició sola. Pasa de verdad cuando cambia la clave de firma del
+      // servidor: los tokens viejos dejan de valer, una única vez.
+      setSesionCaida(true);
     };
     window.addEventListener(SESION_CAIDA, caida);
     return () => window.removeEventListener(SESION_CAIDA, caida);
@@ -53,6 +58,7 @@ export function Proveedor({ children }) {
   const entrar = async (email, clave) => {
     const r = await api.login(email, clave);
     token.guardar(r.token);
+    setSesionCaida(false);
     setPerfil(r.perfil);
     await refrescar();
   };
@@ -85,7 +91,7 @@ export function Proveedor({ children }) {
   return (
     <Ctx.Provider
       value={{
-        perfil, cupos, catalogos, cargando,
+        perfil, cupos, catalogos, cargando, sesionCaida,
         entrar, entrarConToken, registrar, salir, refrescar, setCupos,
       }}
     >

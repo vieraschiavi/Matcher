@@ -17,9 +17,9 @@ citas, y la única forma de no filtrarlo es no tenerlo.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
-from . import geo
+from . import filtros, geo
 
 # Dos pings en la misma celda dentro de esta ventana = un cruce.
 VENTANA_CRUCE = timedelta(minutes=30)
@@ -48,11 +48,12 @@ def registrar_ping(almacen, perfil, lat: float, lon: float, momento: datetime | 
     return {"cruces_nuevos": nuevos, "celda": clave}
 
 
-def de(almacen, perfil, limite: int = 50) -> list[dict]:
+def de(almacen, perfil, limite: int = 50, hoy: date | None = None) -> list[dict]:
     """Con quién te cruzaste, ordenado por cantidad de cruces.
 
     Se excluye a quien ya descartaste: cruzarte diez veces con alguien a quien
-    le dijiste que no es exactamente lo que no querés que te recuerden.
+    le dijiste que no es exactamente lo que no querés que te recuerden. Y se
+    respetan los filtros duros, igual que en el deck y en el radar.
     """
     vistos = almacen.vistos_por(perfil.id)
     filas = almacen.cruces_de(perfil.id, limite * 2)
@@ -61,7 +62,20 @@ def de(almacen, perfil, limite: int = 50) -> list[dict]:
         if fila["otro_id"] in vistos:
             continue
         otro = almacen.perfil(fila["otro_id"])
-        if not otro or not otro.activo or not otro.completo:
+        if not otro:
+            continue
+        # Los filtros DUROS también valen acá. Esta lista se saltaba
+        # `pasa_filtros` y sólo miraba activo/completo: alguien que pedía ver
+        # sólo mujeres se encontraba hombres en "te cruzaste con", que es
+        # exactamente la queja que el producto ataca. Cruzarse es un hecho
+        # físico, pero no es motivo para mostrar a quien pediste no ver.
+        #
+        # reciproco=False a propósito: acá no se exige que YO pase los filtros
+        # del otro. Eso es una ayuda para que el deck no se llene de gente que
+        # nunca me va a dar like; esconder a alguien con quien me crucé porque
+        # yo no entro en SU rango sería decidir por él.
+        ok, _ = filtros.pasa_filtros(perfil, otro, hoy=hoy, reciproco=False)
+        if not ok:
             continue
         from . import scoring
 
@@ -78,6 +92,14 @@ def de(almacen, perfil, limite: int = 50) -> list[dict]:
                 # celda de 250 m con la que se detectó: esa es más precisa de
                 # lo que hace falta mostrar.
                 "cerca_de": fila["cerca_de"],
+                # La misma celda ya como coordenada, para poder pintarla en el
+                # mapa sin que el frontend tenga que saber cómo se arma la
+                # clave.
+                "punto": (
+                    dict(zip(("lat", "lon"), punto, strict=True))
+                    if (punto := geo.punto_de_clave(fila["cerca_de"] or ""))
+                    else None
+                ),
             }
         )
         if len(salida) >= limite:

@@ -719,19 +719,39 @@ class Almacen:
         ).fetchall()
         ya_respondidos = self.vistos_por(perfil.id)
         pendientes = [f for f in filas if f["de_id"] not in ya_respondidos]
+
+        # Los filtros duros valen también acá. Antes esta lista sólo miraba
+        # `activo`: quien pedía ver únicamente mujeres se encontraba hombres en
+        # "te gustaron". Que alguien me haya dado like no lo mete en el filtro
+        # que YO puse — es justo al revés.
+        #
+        # reciproco=False: ya me dio like, así que exigir que yo entre en sus
+        # preferencias no aporta nada y escondería gente que sí me quiere ver.
+        #
+        # El filtrado va ANTES del corte por plan a propósito: si no, el plan
+        # gratis mostraría un contador de likes que no coincide con la lista
+        # que se ve al pagar.
+        visibles = []
+        for f in pendientes:
+            otro = self.perfil(f["de_id"])
+            if not otro:
+                continue
+            ok, _ = filtros.pasa_filtros(perfil, otro, reciproco=False)
+            if ok:
+                visibles.append((f, otro))
+
         if not planes.limites_de(perfil).ver_quien_me_dio_like:
             return {
                 "visible": False,
-                "cantidad": len(pendientes),
+                "cantidad": len(visibles),
                 "plan_sugerido": "plus",
                 "perfiles": [],
             }
-        perfiles = []
-        for f in pendientes:
-            otro = self.perfil(f["de_id"])
-            if otro and otro.activo:
-                comp, _ = scoring.compatibilidad(perfil, otro)
-                perfiles.append(otro.a_dict() | {"tipo": f["tipo"], "compatibilidad": comp})
+        perfiles = [
+            otro.a_dict()
+            | {"tipo": f["tipo"], "compatibilidad": scoring.compatibilidad(perfil, otro)[0]}
+            for f, otro in visibles
+        ]
         return {"visible": True, "cantidad": len(perfiles), "perfiles": perfiles}
 
     # ------------------------------------------------------------------

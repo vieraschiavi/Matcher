@@ -340,6 +340,22 @@ def clave_celda(lat: float, lon: float, metros: int = PRECISION_CRUCE_M) -> str:
     return f"{metros}:{i}:{j}"
 
 
+def punto_de_clave(clave: str) -> tuple[float, float] | None:
+    """Vuelve de la clave de celda a una coordenada, para poder DIBUJAR el
+    cruce en el mapa.
+
+    Devuelve el centro de la celda de mapa (500 m), no el de la celda de cruce
+    (250 m): el cruce se detecta más fino de lo que se muestra, y mostrarlo con
+    la precisión con que se detectó sería más de lo que hace falta.
+    """
+    try:
+        metros, i, j = clave.split(":")
+        lat, lon = centro_de_celda((int(i), int(j)), int(metros))
+    except (ValueError, AttributeError):
+        return None
+    return aproximar(lat, lon)
+
+
 def rumbo(desde: tuple[float, float], hasta: tuple[float, float]) -> float:
     """Rumbo en grados desde el norte (0 = norte, 90 = este). Lo usa el radar
     para ubicar el punto alrededor tuyo."""
