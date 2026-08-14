@@ -75,6 +75,18 @@ PROVEEDORES: dict[str, Proveedor] = {
         variable_id="GOOGLE_CLIENT_ID",
         variable_secreto="GOOGLE_CLIENT_SECRET",
     ),
+    "facebook": Proveedor(
+        nombre="facebook",
+        autorizacion="https://www.facebook.com/v21.0/dialog/oauth",
+        token="https://graph.facebook.com/v21.0/oauth/access_token",
+        # Hay que pedir los campos explícitamente: el endpoint /me sin
+        # `fields` devuelve sólo id y nombre, sin email, y el alta quedaba
+        # trabada sin decir por qué.
+        usuario="https://graph.facebook.com/v21.0/me?fields=id,name,first_name,email,picture",
+        alcance="email public_profile",
+        variable_id="FACEBOOK_APP_ID",
+        variable_secreto="FACEBOOK_APP_SECRET",
+    ),
 }
 
 
@@ -196,12 +208,27 @@ def datos_del_usuario(nombre: str, token_acceso: str) -> dict:
     datos = _get(p.usuario, token_acceso)
     email = (datos.get("email") or "").strip().lower()
     if not email:
-        raise DatosInvalidos("el proveedor no compartió un email")
+        # Facebook permite cuentas sin email (alta por teléfono) y además el
+        # usuario puede desmarcar el permiso en la pantalla de consentimiento.
+        # Sin email no hay forma de identificar la cuenta, así que se corta
+        # con un mensaje que explique qué hacer.
+        raise DatosInvalidos(
+            "el proveedor no compartió un email. Revisá que la cuenta tenga uno "
+            "y que hayas aceptado compartirlo, o entrá con email y contraseña."
+        )
     if datos.get("email_verified") is False:
         raise DatosInvalidos("ese email no está verificado en el proveedor")
+
+    # La foto viene plana en Google y anidada en Facebook
+    # (`picture.data.url`). Normalizar acá evita que cada proveedor nuevo
+    # obligue a tocar el backend.
+    foto = datos.get("picture") or ""
+    if isinstance(foto, dict):
+        foto = foto.get("data", {}).get("url", "")
+
     return {
         "email": email,
-        "nombre": (datos.get("given_name") or datos.get("name") or "").strip(),
-        "foto": datos.get("picture") or "",
+        "nombre": (datos.get("given_name") or datos.get("first_name") or datos.get("name") or "").strip(),
+        "foto": foto,
         "proveedor": nombre,
     }

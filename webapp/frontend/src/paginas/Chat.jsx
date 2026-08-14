@@ -59,7 +59,11 @@ export default function Chat() {
           : `${matches.length} conversación${matches.length === 1 ? "" : "es"} abiertas.`}
       </p>
 
-      <div className="deck-zona" style={{ gridTemplateColumns: "minmax(0, 320px) minmax(0, 1fr)" }}>
+      {/* La proporción de columnas va en CSS, NO en un style en línea: el
+          estilo en línea le gana al @media de móvil y la grilla de dos
+          columnas no colapsaba. En un teléfono el panel derecho quedaba
+          fuera de pantalla y la página parecía rota. */}
+      <div className="deck-zona zona-chat">
         <div className="panel">
           <h3>Conversaciones</h3>
           <div className="chat-lista">

@@ -9,14 +9,19 @@
    (la barra lateral pasa a barra inferior), no una hoja aparte: dos hojas se
    desincronizan a la semana. */
 :root {
-  --navy-950: #0a1020;
-  --navy-900: #0e1628;
-  --navy-800: #142036;
-  --navy-700: #1c2c4a;
-  --line: #24344f;
-  --ink: #eaf1fb;
-  --muted: #93a5c0;
-  --faint: #64748b;
+  /* Fondos.
+     Antes eran el navy puro de Kobra (#0a1020), que es un tema de tablero
+     financiero: correcto y helado. Acá la base tiene una pizca de violeta y
+     las superficies suben de luminosidad, así la app se siente cálida sin
+     dejar de ser oscura — que es lo que hace toda la categoría. */
+  --navy-950: #120d1c;
+  --navy-900: #1a1226;
+  --navy-800: #241a33;
+  --navy-700: #33253f;
+  --line: #3a2b48;
+  --ink: #fbf5f7;
+  --muted: #b6a5c4;
+  --faint: #8b7a9c;
   --green: #7cc242;
   --green-deep: #00c896;
   --amber: #f2b441;
@@ -125,6 +130,41 @@ button { font-family: inherit; }
   display: grid; grid-template-columns: minmax(0, 420px) minmax(260px, 1fr);
   gap: 26px; align-items: start;
 }
+/* Variantes por pantalla. Van acá y no como style en línea: el estilo en
+   línea le gana al @media de abajo y las dos columnas no colapsaban en el
+   teléfono — el radar quedaba minúsculo y el chat se iba de pantalla. */
+.zona-chat { grid-template-columns: minmax(0, 320px) minmax(0, 1fr); }
+.zona-radar { grid-template-columns: minmax(0, 480px) minmax(260px, 1fr); }
+
+/* ---- fichas de gente (radar y cruces) ----
+   Foto grande con la cara: un radar de puntitos no dice nada, la gente
+   quiere ver a quién tiene cerca. Es la misma unidad en las dos listas. */
+.lista-gente {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.ficha-gente {
+  position: relative; border-radius: 16px; overflow: hidden;
+  aspect-ratio: 4 / 5; background: var(--navy-800); border: 1px solid var(--line);
+}
+.ficha-gente img { width: 100%; height: 100%; object-fit: cover; object-position: center 22%; display: block; }
+.ficha-velo {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(to top, rgba(6,10,20,.92) 6%, rgba(6,10,20,.35) 42%, transparent 62%);
+}
+.ficha-datos { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px 12px; }
+.ficha-datos b { font-size: 15.5px; font-weight: 800; display: block; }
+.ficha-datos b span { font-weight: 500; opacity: .9; }
+.ficha-linea { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; color: #cfd9ea; margin-top: 2px; }
+.ficha-cruce { color: var(--amber); font-weight: 700; }
+.ficha-insignias { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+.ficha-like {
+  position: absolute; top: 9px; right: 9px; width: 38px; height: 38px;
+  border-radius: 50%; border: none; cursor: pointer; font-size: 18px; color: #fff;
+  background: linear-gradient(135deg, var(--coral), var(--coral-deep));
+  box-shadow: 0 6px 16px rgba(201,24,74,.45);
+}
+.ficha-like:active { transform: scale(.92); }
 .deck {
   position: relative; width: 100%; aspect-ratio: 4 / 5.4;
   max-height: calc(100vh - 230px);
@@ -341,9 +381,18 @@ table.tabla tr:hover td { background: var(--navy-800); }
 .entrar-fondo {
   min-height: 100%; display: grid; place-items: center; padding: 22px;
   background:
-    radial-gradient(1100px 620px at 12% -8%, rgba(255, 77, 109, .30), transparent 60%),
-    radial-gradient(900px 560px at 100% 100%, rgba(142, 91, 239, .26), transparent 58%),
+    radial-gradient(1200px 700px at 8% -10%, rgba(255, 92, 122, .42), transparent 62%),
+    radial-gradient(1000px 620px at 100% 105%, rgba(142, 91, 239, .38), transparent 60%),
+    radial-gradient(700px 500px at 85% 10%, rgba(240, 64, 126, .18), transparent 62%),
     var(--navy-950);
+}
+
+/* Las pantallas de adentro también llevan color de fondo. Sin esto la app era
+   un rectángulo negro con tarjetas: correcto y helado. */
+.layout {
+  background:
+    radial-gradient(900px 520px at 100% -5%, rgba(240, 64, 126, .13), transparent 60%),
+    radial-gradient(800px 500px at -5% 100%, rgba(142, 91, 239, .12), transparent 60%);
 }
 .entrar-caja { width: 100%; max-width: 430px; }
 .entrar-marca { text-align: center; margin-bottom: 18px; }
@@ -369,9 +418,16 @@ table.tabla tr:hover td { background: var(--navy-800); }
 .btn-proveedor:hover { background: #eef1f6; border-color: #eef1f6; }
 .btn-proveedor-icono {
   width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center;
-  background: linear-gradient(135deg, #ea4335 0%, #fbbc05 35%, #34a853 68%, #4285f4 100%);
   color: #fff; font-size: 12px; font-weight: 900;
 }
+.btn-google .btn-proveedor-icono {
+  background: linear-gradient(135deg, #ea4335 0%, #fbbc05 35%, #34a853 68%, #4285f4 100%);
+}
+/* Facebook exige su azul y su tipografía en el botón; pintarlo con el color
+   de la app hace que deje de leerse como "esto es Facebook". */
+.btn-facebook { background: #1877f2; border-color: #1877f2; color: #fff; }
+.btn-facebook:hover { background: #146ad4; border-color: #146ad4; }
+.btn-facebook .btn-proveedor-icono { background: #fff; color: #1877f2; font-size: 14px; }
 .separador {
   display: flex; align-items: center; gap: 10px; color: var(--faint);
   font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; margin: 14px 0;
@@ -401,7 +457,7 @@ table.tabla tr:hover td { background: var(--navy-800); }
   .nav-item .icono { font-size: 20px; }
   .nav-item .globo { position: absolute; margin: 0; transform: translate(14px, -10px); }
   .main { padding: 16px 14px calc(20px + var(--nav-alto)); }
-  .deck-zona { grid-template-columns: 1fr; }
+  .deck-zona, .zona-chat, .zona-radar { grid-template-columns: 1fr; }
   .deck { max-height: none; aspect-ratio: 4 / 5.4; }
   .page-title { font-size: 19px; }
 }

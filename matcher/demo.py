@@ -245,9 +245,11 @@ def _sembrar_ubicaciones_y_cruces(almacen: Almacen, rnd: random.Random) -> None:
         centro = geo.coordenadas(p.ciudad)
         if not centro:
             continue
-        # Desplazamiento en grados: ~0.11 grados de latitud son ~12 km.
-        d_lat = rnd.uniform(-0.11, 0.11)
-        d_lon = rnd.uniform(-0.11, 0.11)
+        # Desplazamiento de hasta ~5 km alrededor del centro. Con los ~12 km de
+        # antes, la mayoría de la gente de Montevideo caía fuera del radio de
+        # 15 km por diagonal y el radar mostraba una sola persona.
+        d_lat = rnd.uniform(-0.045, 0.045)
+        d_lon = rnd.uniform(-0.045, 0.045)
         lat, lon = geo.aproximar(centro[0] + d_lat, centro[1] + d_lon)
         almacen.guardar_ubicacion(
             p.id, lat, lon, ahora - timedelta(minutes=rnd.randint(0, 60 * 20))

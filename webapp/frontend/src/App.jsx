@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Logo from "./Logo";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api } from "./api";
 import { useApp } from "./estado";
@@ -31,7 +32,7 @@ function Barra({ globos }) {
   return (
     <nav className="sidebar">
       <div className="brand">
-        <div className="brand-logo">M</div>
+        <Logo tam={34} id="barra" />
         <b>
           Match<span>er</span>
         </b>
@@ -134,7 +135,7 @@ export default function App() {
     return (
       <div className="entrar-fondo">
         <div className="entrar-marca">
-          <div className="logo-grande">M</div>
+          <Logo tam={62} id="cargando" />
           <p>Cargando…</p>
         </div>
       </div>

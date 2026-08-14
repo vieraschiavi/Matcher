@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Logo from "../Logo";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../estado";
@@ -8,7 +9,8 @@ import { GENEROS, alternar } from "../vocabulario";
 // como configurados: un botón de "Continuar con Google" que devuelve un error
 // de configuración es peor que no tenerlo.
 const PROVEEDORES = {
-  google: { texto: "Continuar con Google", icono: "G", color: "#ffffff", fondo: "#ffffff" },
+  google: { texto: "Continuar con Google", icono: "G", clase: "btn-google" },
+  facebook: { texto: "Continuar con Facebook", icono: "f", clase: "btn-facebook" },
 };
 
 const ERRORES = {
@@ -135,7 +137,7 @@ export default function Entrar() {
     <div className="entrar-fondo">
       <div className="entrar-caja">
         <div className="entrar-marca">
-          <div className="logo-grande">M</div>
+          <Logo tam={62} id="entrar" />
           <h1>Matcher</h1>
           <p>Filtrá por lo que de verdad te importa. Todos los filtros, gratis.</p>
         </div>
@@ -146,7 +148,7 @@ export default function Entrar() {
               {proveedores.map((p) => (
                 <button
                   key={p}
-                  className="btn btn-bloque btn-proveedor"
+                  className={`btn btn-bloque btn-proveedor ${PROVEEDORES[p]?.clase || ""}`}
                   disabled={ocupado}
                   onClick={() => entrarCon(p)}
                 >

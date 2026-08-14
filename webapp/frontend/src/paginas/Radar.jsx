@@ -20,6 +20,7 @@ function posicionEnRadar(distanciaKm, rumbo, radioKm) {
 export default function Radar() {
   const navegar = useNavigate();
   const [datos, setDatos] = useState(null);
+  const [cruces, setCruces] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [radioKm, setRadioKm] = useState(15);
   const [seleccion, setSeleccion] = useState(null);
@@ -32,6 +33,12 @@ export default function Radar() {
     setDatos(r);
     setCargando(false);
   };
+
+  // Los cruces se muestran EN esta pantalla, no detrás de un botón que lleva a
+  // otra: es la mitad de lo que la gente viene a ver acá.
+  useEffect(() => {
+    api.cruces().then(setCruces).catch(() => setCruces(null));
+  }, [pulso]);
 
   // Pide GPS una vez al entrar y cada 5 minutos mientras la pantalla está
   // abierta: alcanza para que el radar y los cruces tengan sentido, sin
@@ -101,7 +108,10 @@ export default function Radar() {
         </div>
       )}
 
-      <div className="deck-zona" style={{ gridTemplateColumns: "minmax(0, 480px) minmax(260px, 1fr)" }}>
+      {/* Mismo caso que el chat: la grilla va en CSS para que colapse a una
+          columna en el teléfono. Con el style en línea el radar quedaba
+          encajado en una columna angosta, del tamaño de una moneda. */}
+      <div className="deck-zona zona-radar">
         <div>
           <div className="panel" style={{ padding: 16 }}>
             <label className="campo" style={{ marginBottom: 12 }}>
@@ -214,16 +224,73 @@ export default function Radar() {
           )}
 
           <div className="panel">
-            <h3>Cruces</h3>
+            <h3>
+              Te cruzaste con{" "}
+              {cruces?.resumen?.personas > 0 && (
+                <span className="insignia insignia-auto">{cruces.resumen.personas}</span>
+              )}
+            </h3>
             <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 0 }}>
               Gente con la que te cruzaste de verdad, no sólo que está cerca ahora.
+              {cruces?.resumen?.cruces_totales > 0 &&
+                ` ${cruces.resumen.cruces_totales} cruces en total.`}
             </p>
-            <button className="btn btn-bloque" onClick={() => navegar("/cruces")}>
-              Ver mis cruces
-            </button>
+            {cruces?.personas?.length === 0 && (
+              <p style={{ color: "var(--faint)", fontSize: 13 }}>
+                Todavía ninguno. Se van sumando solos mientras usás la app.
+              </p>
+            )}
+            <div className="lista-gente">
+              {cruces?.personas?.map((p) => (
+                <FichaGente key={p.id} p={p} onLike={() => like(p.id)} cruces={p.veces} />
+              ))}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Lista de quién hay cerca, con la cara. El radar solo, con puntitos,
+          no alcanza: la gente quiere ver a quién tiene al lado. */}
+      <h2 className="page-title" style={{ marginTop: 26, fontSize: 18 }}>
+        Cerca tuyo ahora {datos?.personas?.length > 0 && `(${datos.personas.length})`}
+      </h2>
+      <div className="lista-gente">
+        {datos?.personas?.map((p) => (
+          <FichaGente key={p.id} p={p} onLike={() => like(p.id)} cruces={p.cruces} />
+        ))}
+      </div>
+      {!cargando && datos?.personas?.length === 0 && (
+        <p style={{ color: "var(--muted)" }}>
+          Nadie en {radioKm} km. Agrandá el radio con el control de arriba.
+        </p>
+      )}
     </>
+  );
+}
+
+// Ficha de una persona: foto grande, distancia y cruces. Es la unidad que se
+// repite en "cerca tuyo" y en "te cruzaste con".
+function FichaGente({ p, onLike, cruces = 0 }) {
+  return (
+    <article className="ficha-gente">
+      <img src={p.fotos?.[0]?.url} alt={`Foto de ${p.nombre}`} />
+      <div className="ficha-velo" />
+      <div className="ficha-datos">
+        <b>
+          {p.nombre} <span>{p.edad}</span>
+        </b>
+        <div className="ficha-linea">
+          {p.distancia_km != null && <span>📍 {p.distancia_km} km</span>}
+          {cruces > 0 && <span className="ficha-cruce">✨ {cruces}x</span>}
+        </div>
+        <div className="ficha-insignias">
+          <span className="insignia insignia-comp">{p.compatibilidad}%</span>
+          {p.verificado && <span className="insignia insignia-verif">✓</span>}
+        </div>
+      </div>
+      <button className="ficha-like" onClick={onLike} aria-label={`Me gusta ${p.nombre}`}>
+        ♥
+      </button>
+    </article>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Logo from "../Logo";
 import { useSearchParams } from "react-router-dom";
 import { api, token as guardarToken } from "../api";
 import { useApp } from "../estado";
@@ -97,7 +98,7 @@ export default function Completar() {
     <div className="entrar-fondo">
       <div className="entrar-caja">
         <div className="entrar-marca">
-          <div className="logo-grande">M</div>
+          <Logo tam={62} id="completar" />
           <h1>Ya casi</h1>
           <p>
             {origen
