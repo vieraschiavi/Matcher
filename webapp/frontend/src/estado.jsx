@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { SESION_CAIDA, api, token } from "./api";
+import { fijarIdioma, idioma, idiomaGuardado, resolverIdioma } from "./i18n";
 
 // Sesión + catálogos en un solo contexto. Los catálogos (países, ciudades,
 // equipos) se piden una vez y se comparten: son ~40 KB y no cambian durante
@@ -12,6 +13,26 @@ export function Proveedor({ children }) {
   const [catalogos, setCatalogos] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [sesionCaida, setSesionCaida] = useState(false);
+  const [lang, setLang] = useState(idioma());
+
+  // El idioma se decide con el país del perfil (es lo pedido: el idioma sale
+  // del país de localización) y el catálogo, que ya trae `idioma` por país.
+  // Se recalcula cuando llega cualquiera de los dos, porque al arrancar no
+  // están todavía y quedaba en español hasta recargar.
+  useEffect(() => {
+    if (idiomaGuardado()) return; // elección manual: no se pisa
+    const elegido = resolverIdioma(perfil, catalogos?.paises);
+    if (elegido !== idioma()) {
+      fijarIdioma(elegido);
+      setLang(elegido);
+    }
+  }, [perfil, catalogos]);
+
+  // Elección explícita: ésta sí se guarda y gana sobre el país.
+  const cambiarIdioma = (codigo) => {
+    fijarIdioma(codigo, { persistir: true });
+    setLang(codigo);
+  };
 
   const refrescar = useCallback(async () => {
     if (!token.leer()) {
@@ -91,7 +112,7 @@ export function Proveedor({ children }) {
   return (
     <Ctx.Provider
       value={{
-        perfil, cupos, catalogos, cargando, sesionCaida,
+        perfil, cupos, catalogos, cargando, sesionCaida, lang, cambiarIdioma,
         entrar, entrarConToken, registrar, salir, refrescar, setCupos,
       }}
     >

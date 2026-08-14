@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { t } from "../i18n";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 
@@ -52,11 +53,11 @@ export default function Chat() {
     navegar("/matches");
   };
 
-  if (cargando) return <p className="page-sub">Cargando…</p>;
+  if (cargando) return <p className="page-sub">{t("Cargando…")}</p>;
 
   return (
     <>
-      <h1 className="page-title">Matches</h1>
+      <h1 className="page-title">{t("Matches")}</h1>
       <p className="page-sub">
         {matches.length === 0
           ? "Todavía no tenés matches. Deslizá en Descubrir o probá el match automático."

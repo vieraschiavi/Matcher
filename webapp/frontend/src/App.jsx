@@ -3,6 +3,7 @@ import Logo from "./Logo";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api } from "./api";
 import { useApp } from "./estado";
+import { t } from "./i18n";
 import {
   IcoChat,
   IcoCorazon,
@@ -69,8 +70,8 @@ function Barra({ globos }) {
           <span className="icono">
             <m.Icono tam={20} />
           </span>
-          <span className="nav-texto">{m.texto}</span>
-          <span className="nav-texto-corto">{m.corta}</span>
+          <span className="nav-texto">{t(m.texto)}</span>
+          <span className="nav-texto-corto">{t(m.corta)}</span>
           {m.globo && globos[m.globo] > 0 && <span className="globo">{globos[m.globo]}</span>}
         </NavLink>
       ))}
@@ -85,7 +86,7 @@ function Barra({ globos }) {
           <span className="icono">
             <IcoSalir tam={20} />
           </span>
-          <span>Salir</span>
+          <span>{t("Salir")}</span>
         </button>
       </div>
     </nav>
@@ -115,8 +116,8 @@ function BarraSuperior() {
           <NavLink
             key={m.a}
             to={m.a}
-            title={m.texto}
-            aria-label={m.texto}
+            title={t(m.texto)}
+            aria-label={t(m.texto)}
             className={({ isActive }) => `sup-boton ${isActive ? "activo" : ""}`}
           >
             <m.Icono tam={19} />
@@ -134,11 +135,11 @@ function Likes() {
   useEffect(() => {
     api.likesRecibidos().then(setDatos).catch(() => setDatos({ visible: false, cantidad: 0 }));
   }, []);
-  if (!datos) return <p className="page-sub">Cargando…</p>;
+  if (!datos) return <p className="page-sub">{t("Cargando…")}</p>;
 
   return (
     <>
-      <h1 className="page-title">Te gustaron</h1>
+      <h1 className="page-title">{t("Te gustaron")}</h1>
       <p className="page-sub">
         {datos.cantidad === 0
           ? "Todavía nadie pendiente. Seguí deslizando."
@@ -179,7 +180,7 @@ function Likes() {
 }
 
 export default function App() {
-  const { perfil, cargando } = useApp();
+  const { perfil, cargando, lang } = useApp();
   const [globos, setGlobos] = useState({ matches: 0, likes: 0 });
   const ubicacion = useLocation();
 
@@ -202,7 +203,7 @@ export default function App() {
       <div className="entrar-fondo">
         <div className="entrar-marca">
           <Logo tam={62} id="cargando" />
-          <p>Cargando…</p>
+          <p>{t("Cargando…")}</p>
         </div>
       </div>
     );
@@ -212,7 +213,7 @@ export default function App() {
   // callback de Google, cuando todavía no hay perfil.
   if (!perfil) {
     return (
-      <Routes>
+      <Routes key={lang}>
         <Route path="/completar" element={<Completar />} />
         <Route path="*" element={<Entrar />} />
       </Routes>
@@ -220,7 +221,7 @@ export default function App() {
   }
 
   return (
-    <div className="layout">
+    <div className="layout" key={lang}>
       <Barra globos={globos} />
       <BarraSuperior />
       <main className="main">

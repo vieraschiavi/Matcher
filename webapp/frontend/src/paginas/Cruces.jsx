@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../i18n";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
 
@@ -25,11 +26,11 @@ export default function Cruces() {
     }
   };
 
-  if (!datos) return <p className="page-sub">Cargando…</p>;
+  if (!datos) return <p className="page-sub">{t("Cargando…")}</p>;
 
   return (
     <>
-      <h1 className="page-title">Cruces</h1>
+      <h1 className="page-title">{t("Te cruzaste con")}</h1>
       <p className="page-sub">
         Se cuenta un cruce cuando estuvieron en el mismo lugar de verdad, no sólo cerca en el
         mapa. {datos.resumen.cruces_totales} cruces con {datos.resumen.personas} personas.

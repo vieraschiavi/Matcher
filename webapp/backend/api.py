@@ -27,6 +27,7 @@ from matcher import (
     automatch,
     cruces,
     demo,
+    filtros,
     geo,
     medios,
     oauth,
@@ -106,6 +107,13 @@ def usuario(authorization: str = Header(default="")) -> Perfil:
     if not perfil:
         raise HTTPException(401, "sesión inválida o vencida")
     return perfil
+
+
+def usuario_opcional(authorization: str = Header(default="")) -> Perfil | None:
+    """El de arriba pero sin exigir sesión. Lo usa "más votados", que se puede
+    mirar sin cuenta pero, con sesión, tiene que respetar los filtros."""
+    token = authorization.removeprefix("Bearer ").strip()
+    return almacen().por_token(token) if token else None
 
 
 # ---------------------------------------------------------------------------
@@ -595,10 +603,21 @@ def mis_cruces(perfil: Perfil = Depends(usuario)):
 
 
 @app.get("/api/ranking")
-def ranking(limite: int = 20):
-    """"Más votados". Público a propósito: es la vitrina de la app y lo que
-    la hace divertida de mirar aunque no estés swipeando."""
-    return {"top": scoring.top_votados(almacen().todos(), min(max(limite, 1), 50))}
+def ranking(limite: int = 20, perfil: Perfil | None = Depends(usuario_opcional)):
+    """"Más votados". Se puede mirar sin cuenta: es la vitrina de la app y lo
+    que la hace divertida aunque no estés swipeando.
+
+    Pero CON sesión respeta tus filtros. Se escapaba: era el único listado de
+    gente que ni siquiera recibía el usuario, así que quien pedía ver sólo
+    mujeres encontraba hombres acá. La vitrina no es excusa — la regla es que
+    el filtro vale en todas las pantallas.
+    """
+    universo = almacen().todos()
+    if perfil:
+        universo = [
+            o for o in universo if filtros.pasa_filtros(perfil, o, reciproco=False)[0]
+        ]
+    return {"top": scoring.top_votados(universo, min(max(limite, 1), 50))}
 
 
 # ---------------------------------------------------------------------------

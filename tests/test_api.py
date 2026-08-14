@@ -5,28 +5,10 @@ la lógica: esa ya tiene sus tests en los módulos del motor.
 """
 
 import pytest
-from fastapi.testclient import TestClient
 
 from matcher import demo
-from matcher.almacen import Almacen
+from tests.conftest import entrar
 from webapp.backend import api as backend
-
-
-@pytest.fixture
-def cliente(monkeypatch):
-    a = Almacen(":memory:")
-    demo.poblar(a, cantidad=40)
-    monkeypatch.setattr(backend, "_almacen", a)
-    monkeypatch.setattr(backend, "POBLAR_DEMO", False)
-    with TestClient(backend.app) as c:
-        yield c
-    a.cerrar()
-
-
-def entrar(cliente, email="vieraschiavi@gmail.com"):
-    r = cliente.post("/api/login", json={"email": email, "clave": demo.CLAVE_DEMO})
-    assert r.status_code == 200, r.text
-    return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
 def test_salud_y_catalogos(cliente):

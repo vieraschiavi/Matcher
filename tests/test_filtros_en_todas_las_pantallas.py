@@ -18,7 +18,10 @@ from datetime import datetime
 import pytest
 
 from matcher import cruces
+from matcher.filtros import pasa_filtros
 from matcher.modelos import Preferencias
+from tests.conftest import entrar
+from webapp.backend import api as backend
 
 
 def cruzar(almacen, a, b, veces=2):
@@ -123,3 +126,56 @@ def test_el_contador_de_likes_coincide_con_lo_que_se_ve(almacen, ella, un_hombre
 
     visible = almacen.quien_me_dio_like(ella)
     assert visible["cantidad"] == len(visible["perfiles"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Barrido por HTTP: ningún endpoint que liste gente puede saltarse el filtro
+# ---------------------------------------------------------------------------
+# Este test es el que importa a largo plazo. Los de arriba prueban una función
+# cada uno; éste recorre la API de punta a punta y falla si aparece una
+# pantalla nueva que devuelva personas sin filtrar. "Más votados" se escapó
+# justamente por eso: era el único listado que ni siquiera recibía al usuario.
+RUTAS_QUE_LISTAN_GENTE = [
+    ("/api/deck?limite=50", "tarjetas"),
+    ("/api/radar?radio_km=200", "personas"),
+    ("/api/cruces", "personas"),
+    ("/api/likes-recibidos", "perfiles"),
+    ("/api/ranking?limite=50", "top"),
+]
+
+
+def test_ninguna_pantalla_devuelve_a_quien_el_filtro_descarta(cliente):
+    """Barrido por HTTP de todos los endpoints que listan gente.
+
+    No mira el género del payload —cada endpoint devuelve una forma distinta y
+    "más votados" ni siquiera lo incluye— sino que compara los ids contra los
+    que el motor considera aceptables. Así el test sirve igual si mañana cambia
+    la forma de una respuesta.
+    """
+    cabeceras = entrar(cliente)
+    assert cliente.patch(
+        "/api/yo",
+        json={"preferencias": {"generos": ["mujer"], "edad_min": 18, "edad_max": 99}},
+        headers=cabeceras,
+    ).status_code == 200
+
+    a = backend._almacen
+    yo = a.perfil(cliente.get("/api/yo", headers=cabeceras).json()["perfil"]["id"])
+    prohibidos = {
+        o.id for o in a.todos() if o.id != yo.id and not pasa_filtros(yo, o, reciproco=False)[0]
+    }
+    assert prohibidos, "el escenario no sirve si no hay nadie a quien filtrar"
+
+    for ruta, campo in RUTAS_QUE_LISTAN_GENTE:
+        resp = cliente.get(ruta, headers=cabeceras)
+        assert resp.status_code == 200, f"{ruta} → {resp.status_code} {resp.text[:120]}"
+        devueltos = {p["id"] for p in (resp.json().get(campo) or []) if isinstance(p, dict)}
+        colados = devueltos & prohibidos
+        assert not colados, f"{ruta} devolvió {len(colados)} perfiles que el filtro descarta"
+
+
+def test_el_ranking_sin_sesion_sigue_siendo_publico(cliente):
+    """La vitrina se puede mirar sin cuenta. Filtrar exige saber por quién."""
+    r = cliente.get("/api/ranking?limite=50")
+    assert r.status_code == 200
+    assert len(r.json()["top"]) > 0

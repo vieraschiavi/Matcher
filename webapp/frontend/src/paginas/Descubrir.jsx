@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { t } from "../i18n";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
 import { useApp } from "../estado";
@@ -220,7 +221,7 @@ export default function Descubrir() {
 
   return (
     <>
-      <h1 className="page-title">Descubrir</h1>
+      <h1 className="page-title">{t("Descubrir")}</h1>
       <p className="page-sub">
         Deslizá o usá los botones. Arrastrar hacia arriba es superfan. Se ordena por cercanía
         primero y después por compatibilidad, popularidad y actividad reciente.
@@ -235,7 +236,7 @@ export default function Descubrir() {
             onPointerUp={soltar}
             onPointerCancel={soltar}
           >
-            {cargando && <div className="panel">Cargando perfiles…</div>}
+            {cargando && <div className="panel">{t("Cargando perfiles…")}</div>}
             {!cargando && !actual && (
               <div className="panel" style={{ height: "100%" }}>
                 <h3>No queda nadie con estos filtros</h3>

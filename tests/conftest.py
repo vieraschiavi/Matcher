@@ -7,9 +7,12 @@ Todos los tests arrancan de un almacén en memoria: son rápidos y no dejan un
 from datetime import date, timedelta
 
 import pytest
+from fastapi.testclient import TestClient
 
+from matcher import demo
 from matcher.almacen import Almacen
 from matcher.modelos import Media, Perfil, Preferencias
+from webapp.backend import api as backend
 
 
 @pytest.fixture
@@ -59,3 +62,25 @@ def hacer_perfil():
         return p
 
     return fabrica
+
+
+# --- API HTTP ---------------------------------------------------------------
+# Vive acá y no en `test_api.py` porque la usan dos módulos de test. Importar
+# un fixture de otro archivo de tests lo sombrea y ruff lo marca (F811): los
+# fixtures compartidos van en conftest.
+@pytest.fixture
+def cliente(monkeypatch):
+    a = Almacen(":memory:")
+    demo.poblar(a, cantidad=40)
+    monkeypatch.setattr(backend, "_almacen", a)
+    monkeypatch.setattr(backend, "POBLAR_DEMO", False)
+    with TestClient(backend.app) as c:
+        yield c
+    a.cerrar()
+
+
+def entrar(cliente, email="vieraschiavi@gmail.com"):
+    """Cabeceras con sesión iniciada para la cuenta de demo."""
+    r = cliente.post("/api/login", json={"email": email, "clave": demo.CLAVE_DEMO})
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['token']}"}

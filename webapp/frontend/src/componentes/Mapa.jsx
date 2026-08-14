@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { t } from "../i18n";
 
 // Mapa de verdad: dónde está la gente que el radar encontró.
 //
@@ -121,7 +122,7 @@ export default function Mapa({
   if (!centro) {
     return (
       <div className="mapa-vacio" style={{ height: alto }}>
-        Todavía no sabemos dónde estás.
+        {t("Todavía no sabemos dónde estás.")}
       </div>
     );
   }
@@ -203,7 +204,7 @@ export default function Mapa({
           })}
 
       <div className="mapa-pie">
-        {sinTiles ? "Mapa sin conexión · posiciones reales" : ATRIBUCION}
+        {sinTiles ? t("Mapa sin conexión · posiciones reales") : ATRIBUCION}
       </div>
     </div>
   );

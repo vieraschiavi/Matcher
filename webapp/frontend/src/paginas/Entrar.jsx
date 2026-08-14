@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../i18n";
 import Logo from "../Logo";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -139,12 +140,12 @@ export default function Entrar() {
         <div className="entrar-marca">
           <Logo tam={62} id="entrar" />
           <h1>Matcher</h1>
-          <p>Filtrá por lo que de verdad te importa. Todos los filtros, gratis.</p>
+          <p>{t("Filtrá por lo que de verdad te importa. Todos los filtros, gratis.")}</p>
         </div>
 
         {sesionCaida && (
           <div className="aviso aviso-info" style={{ marginBottom: 14 }}>
-            Se cerró tu sesión y hay que entrar de nuevo. Tus datos están intactos.
+            {t("Se cerró tu sesión y hay que entrar de nuevo. Tus datos están intactos.")}
           </div>
         )}
 
@@ -162,7 +163,7 @@ export default function Entrar() {
                   {PROVEEDORES[p]?.texto || `Continuar con ${p}`}
                 </button>
               ))}
-              <div className="separador">o con tu email</div>
+              <div className="separador">{t("o con tu email")}</div>
             </>
           )}
 
@@ -171,23 +172,23 @@ export default function Entrar() {
               className={pestana === "entrar" ? "on" : ""}
               onClick={() => setPestana("entrar")}
             >
-              Entrar
+              {t("Entrar")}
             </button>
             <button
               className={pestana === "crear" ? "on" : ""}
               onClick={() => setPestana("crear")}
             >
-              Crear cuenta
+              {t("Crear cuenta")}
             </button>
           </div>
 
           <form onSubmit={enviar}>
             <label className="campo">
-              <span>Email</span>
+              <span>{t("Email")}</span>
               <input type="email" required value={f.email} onChange={set("email")} />
             </label>
             <label className="campo">
-              <span>Contraseña</span>
+              <span>{t("Contraseña")}</span>
               <input
                 type="password"
                 required
@@ -201,26 +202,26 @@ export default function Entrar() {
               <>
                 <div className="fila">
                   <label className="campo">
-                    <span>Nombre</span>
+                    <span>{t("Nombre")}</span>
                     <input required value={f.nombre} onChange={set("nombre")} />
                   </label>
                   <label className="campo">
-                    <span>Nacimiento</span>
+                    <span>{t("Nacimiento")}</span>
                     <input type="date" required value={f.nacimiento} onChange={set("nacimiento")} />
                   </label>
                 </div>
                 <div className="fila">
                   <label className="campo">
-                    <span>Sos</span>
+                    <span>{t("Sos")}</span>
                     <select value={f.genero} onChange={set("genero")}>
-                      <option value="mujer">Mujer</option>
-                      <option value="hombre">Hombre</option>
-                      <option value="trans">Trans</option>
-                      <option value="otro">Otro</option>
+                      <option value="mujer">{t("Mujer")}</option>
+                      <option value="hombre">{t("Hombre")}</option>
+                      <option value="trans">{t("Trans")}</option>
+                      <option value="otro">{t("Otro")}</option>
                     </select>
                   </label>
                   <label className="campo">
-                    <span>Altura (cm)</span>
+                    <span>{t("Altura (cm)")}</span>
                     <input
                       type="number"
                       min={130}
@@ -231,7 +232,7 @@ export default function Entrar() {
                   </label>
                 </div>
                 <label className="campo">
-                  <span>Buscás (podés elegir varios; nada marcado = todos)</span>
+                  <span>{t("Buscás (podés elegir varios; nada marcado = todos)")}</span>
                   <div className="chips">
                     {GENEROS.map((g) => (
                       <button
@@ -249,7 +250,7 @@ export default function Entrar() {
                 </label>
                 <div className="fila">
                   <label className="campo">
-                    <span>País</span>
+                    <span>{t("País")}</span>
                     <select
                       value={f.pais}
                       onChange={(e) => {
@@ -265,7 +266,7 @@ export default function Entrar() {
                     </select>
                   </label>
                   <label className="campo">
-                    <span>Ciudad</span>
+                    <span>{t("Ciudad")}</span>
                     <select value={f.ciudad} onChange={set("ciudad")}>
                       {pais?.ciudades.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -275,18 +276,18 @@ export default function Entrar() {
                     </select>
                   </label>
                   <label className="campo">
-                    <span>Postura política</span>
+                    <span>{t("Postura política")}</span>
                     <select value={f.politica} onChange={set("politica")}>
-                      <option value="izquierda">Izquierda</option>
-                      <option value="derecha">Derecha</option>
-                      <option value="neutro">Neutro</option>
+                      <option value="izquierda">{t("Izquierda")}</option>
+                      <option value="derecha">{t("Derecha")}</option>
+                      <option value="neutro">{t("Neutro")}</option>
                     </select>
                   </label>
                 </div>
                 {/* El equipo de fútbol es lo único que salió del alta, a
                     pedido. Se elige en "Mi perfil" y el filtro sigue igual. */}
                 <label className="campo">
-                  <span>Tus hobbies (marcá los que quieras)</span>
+                  <span>{t("Tus hobbies (marcá los que quieras)")}</span>
                   <div className="chips">
                     {(catalogos?.intereses || []).map((i) => (
                       <button
@@ -301,7 +302,7 @@ export default function Entrar() {
                   </div>
                 </label>
                 <label className="campo">
-                  <span>Contá algo de vos</span>
+                  <span>{t("Contá algo de vos")}</span>
                   <textarea
                     value={f.bio}
                     maxLength={500}
@@ -319,13 +320,13 @@ export default function Entrar() {
               </div>
             )}
             <button className="btn btn-primario btn-bloque" disabled={ocupado}>
-              {ocupado ? "Un momento…" : pestana === "entrar" ? "Entrar" : "Crear mi cuenta"}
+              {ocupado ? t("Un momento…") : pestana === "entrar" ? t("Entrar") : t("Crear mi cuenta")}
             </button>
           </form>
         </div>
 
         <div className="panel demo-caja">
-          <h3>Probar la demo</h3>
+          <h3>{t("Probar la demo")}</h3>
           <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "0 0 11px" }}>
             Dos cuentas con Gold vigente, verificadas y con las 10 fotos cargadas. El resto de los
             perfiles son sintéticos y están marcados como tales.

@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
+import { IDIOMAS, t } from "../i18n";
 import { api, duracionVideo, leerArchivo } from "../api";
 import Camara from "../componentes/Camara";
 import { useApp } from "../estado";
 import { INTENCIONES, alternar } from "../vocabulario";
 
 export default function MiPerfil() {
-  const { perfil, catalogos, refrescar } = useApp();
+  const { perfil, catalogos, refrescar, lang, cambiarIdioma } = useApp();
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [borrador, setBorrador] = useState(null);
@@ -13,7 +14,7 @@ export default function MiPerfil() {
   const inputFoto = useRef(null);
   const inputVideo = useRef(null);
 
-  if (!perfil || !catalogos) return <p className="page-sub">Cargando…</p>;
+  if (!perfil || !catalogos) return <p className="page-sub">{t("Cargando…")}</p>;
 
   const p = borrador || {
     nombre: perfil.nombre,
@@ -125,12 +126,31 @@ export default function MiPerfil() {
 
   return (
     <>
-      <h1 className="page-title">Mi perfil</h1>
+      <h1 className="page-title">{t("Mi perfil")}</h1>
       <p className="page-sub">
         Hasta {catalogos.limites.fotos} fotos y {catalogos.limites.videos} videos de{" "}
         {catalogos.limites.segundos_video} segundos. La primera foto es la portada: es lo único que
         se ve antes de que alguien decida deslizar.
       </p>
+
+      {/* El idioma se elige solo por el país, pero tiene que poder corregirse:
+          hay brasileños en Uruguay y uruguayos en Miami, y adivinarle el
+          idioma a alguien sin dejarlo cambiarlo es peor que no adivinar. */}
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <h3>{t("Idioma")}</h3>
+        <div className="chips">
+          {IDIOMAS.map((i) => (
+            <button
+              key={i.codigo}
+              type="button"
+              className={`chip ${lang === i.codigo ? "on" : ""}`}
+              onClick={() => cambiarIdioma(i.codigo)}
+            >
+              {i.nombre}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="grid grid-2" style={{ alignItems: "start" }}>
         <div className="panel">

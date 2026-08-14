@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import { t } from "../i18n";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
 import { IcoCorazon, IcoPin, IcoRayo, IcoVerificado } from "../Iconos";
 import Mapa from "../componentes/Mapa";
 
-// Radar en SVG, no un mapa de verdad: no hay tiles sin salir a internet desde
-// el APK y sin clave de un proveedor de mapas. Lo que sí importa —cuánta
-// gente hay cerca, en qué dirección, qué tan lejos— se lee igual de bien en
-// un radar que en un mapa, y es la forma en que ya lo hace la categoría
-// (es literalmente cómo arrancó Happn).
+// Dos vistas de lo mismo: el mapa (dónde está cada uno, en la calle) y el
+// radar en SVG (a qué distancia y para qué lado). El radar no es el plan B del
+// mapa: contesta otra pregunta y se lee de un vistazo, que es como arrancó
+// Happn. El plan B de verdad está en `Mapa.jsx`, para cuando no cargan tiles.
 const LADO = 480;
 const CENTRO = LADO / 2;
 const RADIO_MAX = CENTRO - 34;
@@ -32,7 +32,7 @@ export default function Radar() {
   const [pulso, setPulso] = useState(0);
   const intervalo = useRef(null);
 
-  // El `finally` apaga "Ubicándote…" pase lo que pase. Con el `setCargando`
+  // El `finally` apaga el "Ubicándote…" pase lo que pase. Con el `setCargando`
   // sólo en el camino feliz, un pedido fallido dejaba el radar en
   // "Ubicándote…" para siempre, sin radar, sin lista y sin ningún error a la
   // vista: la pantalla parecía rota.
@@ -107,7 +107,7 @@ export default function Radar() {
 
   return (
     <>
-      <h1 className="page-title">Radar</h1>
+      <h1 className="page-title">{t("Radar")}</h1>
       <p className="page-sub">
         Quién hay cerca, ahora. Las posiciones están redondeadas a{" "}
         {datos?.precision_m || 500} m: nadie ve tu ubicación exacta, y vos no ves la de nadie.
@@ -144,7 +144,7 @@ export default function Radar() {
               />
             </label>
 
-            {cargando && <p style={{ color: "var(--muted)" }}>Ubicándote…</p>}
+            {cargando && <p style={{ color: "var(--muted)" }}>{t("Ubicándote…")}</p>}
 
             {/* Mapa o radar. El mapa contesta "¿dónde?" y el radar "¿a qué
                 distancia y para qué lado?" — son dos preguntas distintas y
@@ -152,10 +152,10 @@ export default function Radar() {
             {!cargando && (
               <div className="pestanas" style={{ marginBottom: 12 }}>
                 <button className={vista === "mapa" ? "on" : ""} onClick={() => setVista("mapa")}>
-                  Mapa
+                  {t("Mapa")}
                 </button>
                 <button className={vista === "radar" ? "on" : ""} onClick={() => setVista("radar")}>
-                  Radar
+                  {t("Radar")}
                 </button>
               </div>
             )}
@@ -237,7 +237,7 @@ export default function Radar() {
 
         <div className="grid">
           <div className="panel">
-            <h3>Por distancia</h3>
+            <h3>{t("Por distancia")}</h3>
             {datos?.por_anillo?.map((a) => (
               <div key={a.hasta_km} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", fontSize: 13.5 }}>
                 <span style={{ color: "var(--muted)" }}>

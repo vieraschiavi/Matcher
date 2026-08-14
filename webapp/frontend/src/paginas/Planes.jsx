@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../i18n";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../estado";
@@ -76,7 +77,7 @@ export default function Planes() {
     return error ? (
       <div className="aviso aviso-error">No se pudieron cargar los planes: {error}</div>
     ) : (
-      <p className="page-sub">Cargando planes…</p>
+      <p className="page-sub">{t("Cargando planes…")}</p>
     );
   }
 
@@ -86,7 +87,7 @@ export default function Planes() {
 
   return (
     <>
-      <h1 className="page-title">Planes</h1>
+      <h1 className="page-title">{t("Planes")}</h1>
       <p className="page-sub">
         Todos los filtros están en el plan gratis. Lo que se paga es volumen y visibilidad, no el
         derecho a filtrar por lo que te importa.

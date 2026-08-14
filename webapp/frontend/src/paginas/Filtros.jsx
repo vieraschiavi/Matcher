@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../i18n";
 import { api } from "../api";
 import RangoDoble from "../componentes/RangoDoble";
 import { useApp } from "../estado";
@@ -13,7 +14,7 @@ export default function Filtros() {
 
   useEffect(() => setP(perfil?.preferencias), [perfil]);
 
-  if (!p || !catalogos) return <p className="page-sub">Cargando…</p>;
+  if (!p || !catalogos) return <p className="page-sub">{t("Cargando…")}</p>;
 
   // Los equipos se ofrecen del país del usuario, y la unidad de distancia
   // (km o millas) también sale de ahí: un uruguayo elige entre equipos
@@ -46,7 +47,7 @@ export default function Filtros() {
 
   return (
     <>
-      <h1 className="page-title">Filtros</h1>
+      <h1 className="page-title">{t("Filtros")}</h1>
       <p className="page-sub">
         Todos los filtros están incluidos en el plan gratis. Se aplican como filtro duro: si pedís
         sólo hinchas de un equipo, no aparece nadie más — no se “compensa” con otra afinidad.
@@ -227,7 +228,7 @@ export default function Filtros() {
         </div>
       )}
       <button className="btn btn-primario" style={{ marginTop: 16 }} onClick={guardar}>
-        Guardar filtros
+        {t("Guardar filtros")}
       </button>
     </>
   );

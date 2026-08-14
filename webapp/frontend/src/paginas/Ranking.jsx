@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../i18n";
 import { api } from "../api";
 
 export default function Ranking() {
@@ -12,7 +13,7 @@ export default function Ranking() {
 
   return (
     <>
-      <h1 className="page-title">Más votados</h1>
+      <h1 className="page-title">{t("Más votados")}</h1>
       <p className="page-sub">
         El puntaje es la tasa de likes suavizada, no el total: un perfil con 3 likes en 4 vistas no
         le gana a uno con 300 en 1.200. El superfan vale por tres likes.
