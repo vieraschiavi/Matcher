@@ -1,0 +1,24 @@
+{
+  "name": "matcher",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Matcher — app de citas con filtros que se respetan (edad, altura, postura política, equipo de fútbol del país) y planes pagos más baratos que la competencia. Web, Android e iOS.",
+  "scripts": {
+    "build:web": "cd webapp/frontend && npm install && npm run build",
+    "sync:android": "npm run build:web && npx cap sync android",
+    "sync:ios": "npm run build:web && npx cap sync ios",
+    "init:android": "npx cap add android",
+    "init:ios": "npx cap add ios",
+    "apk:debug": "npm run sync:android && cd android && ./gradlew assembleDebug",
+    "apk:release": "npm run sync:android && cd android && ./gradlew assembleRelease",
+    "ios:abrir": "npm run sync:ios && npx cap open ios"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.0"
+  }
+}

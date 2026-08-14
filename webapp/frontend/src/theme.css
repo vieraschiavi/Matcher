@@ -1,0 +1,349 @@
+/* Matcher · tema
+   ===============
+   La base son los tokens de MV Kobra AI (navy + verde): mismo fondo, misma
+   tipografía, mismos radios y misma densidad de datos. Encima va la capa de
+   app de citas: acento coral, tarjetas a sangre con la foto ocupando todo, y
+   botones de acción circulares grandes.
+
+   Un solo archivo para web, PC y APK. El modo móvil es el @media de abajo
+   (la barra lateral pasa a barra inferior), no una hoja aparte: dos hojas se
+   desincronizan a la semana. */
+:root {
+  --navy-950: #0a1020;
+  --navy-900: #0e1628;
+  --navy-800: #142036;
+  --navy-700: #1c2c4a;
+  --line: #24344f;
+  --ink: #eaf1fb;
+  --muted: #93a5c0;
+  --faint: #64748b;
+  --green: #7cc242;
+  --green-deep: #00c896;
+  --amber: #f2b441;
+  --red: #ff7675;
+  /* Acentos propios de Matcher */
+  --coral: #ff4d6d;
+  --coral-deep: #c9184a;
+  --violeta: #8e5bef;
+  --azul: #5b8def;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --nav-alto: 0px; /* lo pisa el modo móvil */
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0; background: var(--navy-950); color: var(--ink);
+  font-family: var(--sans); font-size: 14.5px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  /* En el APK el contenido no puede quedar debajo de la barra de estado. */
+  padding-top: env(safe-area-inset-top);
+  overscroll-behavior-y: none;
+}
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* ---- layout ---- */
+.layout { display: flex; min-height: 100%; }
+.main { flex: 1; min-width: 0; padding: 26px 30px calc(56px + var(--nav-alto)); }
+.page-title { font-size: 22px; font-weight: 800; letter-spacing: -.01em; margin: 0 0 4px; }
+.page-sub { color: var(--muted); font-size: 13.5px; margin: 0 0 22px; max-width: 76ch; }
+
+/* ---- barra lateral (Kobra) ---- */
+.sidebar {
+  width: 232px; flex: none; background: var(--navy-900);
+  border-right: 1px solid var(--line); padding: 20px 13px;
+  display: flex; flex-direction: column; gap: 3px;
+  position: sticky; top: 0; height: 100vh;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 2px 10px 16px; }
+.brand-logo {
+  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--coral), var(--violeta));
+  font-weight: 900; font-size: 18px; color: #fff;
+}
+.brand b { font-size: 15px; letter-spacing: .01em; }
+.brand b span { color: var(--coral); }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  border-radius: 9px; color: var(--muted); font-weight: 600; font-size: 13.5px;
+  border: 1px solid transparent; cursor: pointer; background: none; width: 100%;
+  text-align: left;
+}
+.nav-item:hover { background: var(--navy-800); color: var(--ink); }
+.nav-item.activo {
+  background: var(--navy-800); color: var(--ink); border-color: var(--line);
+  box-shadow: inset 3px 0 0 var(--coral);
+}
+.nav-item .globo {
+  margin-left: auto; background: var(--coral); color: #fff; border-radius: 999px;
+  font-size: 11px; font-weight: 800; padding: 1px 7px; min-width: 20px; text-align: center;
+}
+.nav-pie { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; }
+
+/* ---- tarjetas y superficies ---- */
+.panel {
+  background: var(--navy-900); border: 1px solid var(--line);
+  border-radius: 14px; padding: 18px;
+}
+.panel h3 { margin: 0 0 12px; font-size: 15px; font-weight: 700; }
+.grid { display: grid; gap: 14px; }
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.grid-3 { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+
+.kpi { background: var(--navy-800); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.kpi .valor { font-size: 25px; font-weight: 800; letter-spacing: -.02em; }
+.kpi .rotulo { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+
+/* ---- botones ---- */
+.btn {
+  border: 1px solid var(--line); background: var(--navy-800); color: var(--ink);
+  border-radius: 10px; padding: 9px 15px; font-weight: 700; font-size: 13.5px; cursor: pointer;
+}
+.btn:hover { border-color: var(--coral); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primario {
+  background: linear-gradient(135deg, var(--coral), var(--coral-deep));
+  border-color: transparent; color: #fff;
+}
+.btn-fantasma { background: none; }
+.btn-bloque { width: 100%; }
+
+/* ---- deck de citas ---- */
+.deck-zona {
+  display: grid; grid-template-columns: minmax(0, 420px) minmax(260px, 1fr);
+  gap: 26px; align-items: start;
+}
+.deck {
+  position: relative; width: 100%; aspect-ratio: 4 / 5.4;
+  max-height: calc(100vh - 230px);
+  touch-action: pan-y;
+}
+.carta {
+  position: absolute; inset: 0; border-radius: 20px; overflow: hidden;
+  background: var(--navy-800); border: 1px solid var(--line);
+  box-shadow: 0 22px 50px rgba(0, 0, 0, .5);
+  user-select: none; -webkit-user-select: none;
+}
+.carta.fondo { transform: scale(.955) translateY(14px); filter: brightness(.72); }
+/* object-position arriba del centro: cuando una foto es más cuadrada que la
+   tarjeta, `cover` recorta y lo que se pierde tiene que ser el torso, nunca la
+   cabeza. Las del pack ya vienen en 4:5.4, pero las que sube un usuario no. */
+.carta img.foto {
+  width: 100%; height: 100%; object-fit: cover; object-position: center 22%;
+  display: block; pointer-events: none;
+}
+.carta video.foto { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+.carta-velo {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(6, 10, 20, .94) 4%, rgba(6, 10, 20, .55) 32%, transparent 58%);
+  pointer-events: none;
+}
+.carta-datos { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 18px 18px; }
+.carta-nombre { font-size: 25px; font-weight: 800; letter-spacing: -.02em; display: flex; align-items: baseline; gap: 9px; }
+.carta-nombre .edad { font-weight: 500; opacity: .9; font-size: 21px; }
+.carta-linea { color: #cfd9ea; font-size: 13px; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.carta-bio { color: #dbe4f2; font-size: 13.5px; margin-top: 9px; }
+
+/* Barritas de progreso de las fotos, arriba de la tarjeta (patrón de stories:
+   es lo que la gente ya sabe usar sin que se lo expliquen). */
+.carta-pasos { position: absolute; top: 9px; left: 10px; right: 10px; display: flex; gap: 4px; z-index: 3; }
+.carta-pasos i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .3); }
+.carta-pasos i.on { background: #fff; }
+/* Mitades invisibles para pasar de foto tocando, como en las stories. */
+.carta-toque { position: absolute; top: 0; bottom: 22%; width: 34%; z-index: 2; cursor: pointer; }
+.carta-toque.izq { left: 0; }
+.carta-toque.der { right: 0; }
+
+.insignia {
+  display: inline-flex; align-items: center; gap: 5px; border-radius: 999px;
+  padding: 3px 9px; font-size: 11.5px; font-weight: 800; letter-spacing: .02em;
+}
+.insignia-comp { background: rgba(124, 194, 66, .18); color: var(--green); border: 1px solid rgba(124, 194, 66, .4); }
+.insignia-oro { background: rgba(242, 180, 65, .16); color: var(--amber); border: 1px solid rgba(242, 180, 65, .42); }
+.insignia-verif { background: rgba(91, 141, 239, .18); color: #a8c4ff; border: 1px solid rgba(91, 141, 239, .45); }
+.insignia-sint { background: rgba(147, 165, 192, .16); color: var(--muted); border: 1px solid var(--line); }
+.insignia-auto { background: rgba(142, 91, 239, .2); color: #cbb2ff; border: 1px solid rgba(142, 91, 239, .5); }
+
+/* Sello de decisión que aparece al arrastrar. */
+.sello {
+  position: absolute; top: 30px; font-size: 30px; font-weight: 900; letter-spacing: .08em;
+  padding: 8px 16px; border-radius: 12px; border: 4px solid currentColor; z-index: 4;
+  pointer-events: none; text-transform: uppercase;
+}
+.sello.like { left: 22px; color: var(--green); transform: rotate(-14deg); }
+.sello.nope { right: 22px; color: var(--red); transform: rotate(14deg); }
+.sello.fan { left: 50%; top: 44%; transform: translate(-50%, -50%); color: var(--azul); }
+
+/* ---- botonera de acciones ---- */
+.acciones { display: flex; justify-content: center; align-items: center; gap: 14px; margin-top: 18px; }
+.accion {
+  width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--navy-800); border: 1px solid var(--line); cursor: pointer;
+  font-size: 23px; color: var(--ink); transition: transform .12s ease;
+}
+.accion:hover:not(:disabled) { transform: translateY(-3px); }
+.accion:disabled { opacity: .38; cursor: not-allowed; }
+.accion.grande { width: 68px; height: 68px; font-size: 27px; }
+.accion.nope { color: var(--red); border-color: rgba(255, 118, 117, .45); }
+.accion.like { color: var(--green); border-color: rgba(124, 194, 66, .5); }
+.accion.fan { color: var(--azul); border-color: rgba(91, 141, 239, .5); }
+.accion.rebobinar { color: var(--amber); border-color: rgba(242, 180, 65, .45); }
+
+/* ---- formularios ---- */
+label.campo { display: block; margin-bottom: 13px; }
+label.campo > span { display: block; color: var(--muted); font-size: 12px; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .05em; }
+input, select, textarea {
+  width: 100%; background: var(--navy-950); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px;
+  font-family: inherit; font-size: 14px;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--coral); }
+textarea { resize: vertical; min-height: 78px; }
+.fila { display: flex; gap: 10px; }
+.fila > * { flex: 1; }
+
+/* Chips: filtros de política, equipo e intereses. */
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  border: 1px solid var(--line); background: var(--navy-800); color: var(--muted);
+  border-radius: 999px; padding: 6px 13px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.chip.on { background: rgba(255, 77, 109, .16); border-color: var(--coral); color: #ffd7de; }
+
+/* ---- tabla (densidad Kobra, para el ranking) ---- */
+table.tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.tabla th {
+  text-align: left; color: var(--muted); font-size: 11.5px; text-transform: uppercase;
+  letter-spacing: .06em; padding: 8px 10px; border-bottom: 1px solid var(--line);
+}
+table.tabla td { padding: 9px 10px; border-bottom: 1px solid rgba(36, 52, 79, .55); }
+table.tabla tr:hover td { background: var(--navy-800); }
+.mini-foto { width: 38px; height: 38px; border-radius: 9px; object-fit: cover; display: block; }
+.barra { height: 6px; border-radius: 3px; background: var(--navy-700); overflow: hidden; }
+.barra > i { display: block; height: 100%; background: linear-gradient(90deg, var(--coral), var(--amber)); }
+
+/* ---- chat ---- */
+.chat-lista { display: flex; flex-direction: column; gap: 8px; }
+.chat-fila { display: flex; gap: 11px; align-items: center; padding: 9px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; }
+.chat-fila:hover, .chat-fila.activo { background: var(--navy-800); border-color: var(--line); }
+.chat-fila img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; }
+.chat-cuerpo { flex: 1; min-width: 0; }
+.chat-cuerpo b { display: block; font-size: 14px; }
+.chat-cuerpo span { color: var(--muted); font-size: 12.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.burbujas { display: flex; flex-direction: column; gap: 8px; padding: 6px 2px; min-height: 220px; max-height: 52vh; overflow-y: auto; }
+.burbuja { max-width: 74%; padding: 9px 13px; border-radius: 15px; font-size: 14px; }
+.burbuja.mia { align-self: flex-end; background: linear-gradient(135deg, var(--coral), var(--coral-deep)); color: #fff; border-bottom-right-radius: 5px; }
+.burbuja.suya { align-self: flex-start; background: var(--navy-800); border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+
+/* ---- avisos ---- */
+.aviso { border-radius: 11px; padding: 11px 14px; font-size: 13px; border: 1px solid; }
+.aviso-info { background: rgba(91, 141, 239, .12); border-color: rgba(91, 141, 239, .4); color: #c6d8ff; }
+.aviso-oro { background: rgba(242, 180, 65, .1); border-color: rgba(242, 180, 65, .4); color: #ffe4ad; }
+.aviso-error { background: rgba(255, 118, 117, .12); border-color: rgba(255, 118, 117, .45); color: #ffd0cf; }
+.aviso-ok { background: rgba(124, 194, 66, .12); border-color: rgba(124, 194, 66, .45); color: #d5f0bd; }
+
+/* ---- modal de match ---- */
+.velo-modal {
+  position: fixed; inset: 0; background: rgba(6, 10, 20, .82); z-index: 60;
+  display: grid; place-items: center; padding: 22px; backdrop-filter: blur(4px);
+}
+.modal { background: var(--navy-900); border: 1px solid var(--line); border-radius: 18px; padding: 24px; max-width: 430px; width: 100%; text-align: center; }
+.modal h2 { margin: 0 0 6px; font-size: 27px; background: linear-gradient(135deg, var(--coral), var(--amber)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.modal-caras { display: flex; justify-content: center; gap: -18px; margin: 16px 0; }
+.modal-caras img { width: 94px; height: 94px; border-radius: 50%; object-fit: cover; border: 3px solid var(--navy-900); }
+.modal-caras img:last-child { margin-left: -22px; }
+
+/* ---- planes ---- */
+.plan-tarjeta { background: var(--navy-900); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; }
+.plan-tarjeta.destacado { border-color: var(--coral); box-shadow: 0 0 0 1px var(--coral), 0 16px 40px rgba(201, 24, 74, .22); }
+.plan-precio { font-size: 34px; font-weight: 900; letter-spacing: -.03em; margin: 8px 0 2px; }
+.plan-precio small { font-size: 14px; font-weight: 600; color: var(--muted); }
+.plan-lista { list-style: none; padding: 0; margin: 14px 0 18px; display: flex; flex-direction: column; gap: 7px; font-size: 13.5px; }
+.plan-lista li::before { content: "✓ "; color: var(--green); font-weight: 900; }
+
+/* ---- galería del perfil ---- */
+.galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 9px; }
+.galeria figure { position: relative; margin: 0; aspect-ratio: 4/5; border-radius: 11px; overflow: hidden; border: 1px solid var(--line); background: var(--navy-800); }
+/* Mismo criterio que la tarjeta: si hay que recortar, se pierde el torso y no
+   la cara. Con `center` las miniaturas de los primeros planos quedaban en un
+   par de ojos. */
+.galeria img, .galeria video {
+  width: 100%; height: 100%; object-fit: cover; object-position: center 20%; display: block;
+}
+.galeria .quitar { position: absolute; top: 5px; right: 5px; width: 26px; height: 26px; border-radius: 50%; background: rgba(6, 10, 20, .78); border: 1px solid var(--line); color: #fff; cursor: pointer; font-size: 14px; line-height: 1; }
+.galeria .vacio { display: grid; place-items: center; color: var(--faint); font-size: 26px; cursor: pointer; }
+.galeria figure.portada::after {
+  content: "PORTADA"; position: absolute; left: 5px; bottom: 5px; font-size: 9.5px;
+  font-weight: 800; letter-spacing: .06em; background: rgba(6, 10, 20, .8);
+  padding: 2px 6px; border-radius: 5px;
+}
+
+/* ---- pantalla de entrada ---- */
+.entrar-fondo {
+  min-height: 100%; display: grid; place-items: center; padding: 22px;
+  background:
+    radial-gradient(1100px 620px at 12% -8%, rgba(255, 77, 109, .30), transparent 60%),
+    radial-gradient(900px 560px at 100% 100%, rgba(142, 91, 239, .26), transparent 58%),
+    var(--navy-950);
+}
+.entrar-caja { width: 100%; max-width: 430px; }
+.entrar-marca { text-align: center; margin-bottom: 18px; }
+.entrar-marca .logo-grande {
+  width: 62px; height: 62px; border-radius: 19px; margin: 0 auto 10px; display: grid;
+  place-items: center; font-size: 32px; font-weight: 900; color: #fff;
+  background: linear-gradient(135deg, var(--coral), var(--violeta));
+  box-shadow: 0 14px 34px rgba(201, 24, 74, .4);
+}
+.entrar-marca h1 { margin: 0; font-size: 29px; letter-spacing: -.02em; }
+.entrar-marca p { margin: 5px 0 0; color: var(--muted); font-size: 13.5px; }
+.pestanas { display: flex; gap: 6px; background: var(--navy-800); border: 1px solid var(--line); border-radius: 11px; padding: 4px; margin-bottom: 16px; }
+.pestanas button { flex: 1; border: none; background: none; color: var(--muted); padding: 8px; border-radius: 8px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
+.pestanas button.on { background: var(--navy-950); color: var(--ink); }
+/* Botón de proveedor externo: blanco, como lo pide la guía de marca de Google
+   y como lo espera la gente. Si se pinta con el color de la app, deja de
+   leerse como "esto es Google" y baja la conversión del alta. */
+.btn-proveedor {
+  background: #fff; color: #1f2430; border-color: #fff; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  margin-bottom: 9px;
+}
+.btn-proveedor:hover { background: #eef1f6; border-color: #eef1f6; }
+.btn-proveedor-icono {
+  width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center;
+  background: linear-gradient(135deg, #ea4335 0%, #fbbc05 35%, #34a853 68%, #4285f4 100%);
+  color: #fff; font-size: 12px; font-weight: 900;
+}
+.separador {
+  display: flex; align-items: center; gap: 10px; color: var(--faint);
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; margin: 14px 0;
+}
+.separador::before, .separador::after {
+  content: ""; flex: 1; height: 1px; background: var(--line);
+}
+
+.demo-caja { margin-top: 14px; }
+.demo-caja button { width: 100%; text-align: left; margin-bottom: 6px; }
+
+/* ---- móvil: barra inferior, mismo CSS ---- */
+@media (max-width: 860px) {
+  :root { --nav-alto: 62px; }
+  .layout { flex-direction: column; }
+  .sidebar {
+    position: fixed; bottom: 0; left: 0; right: 0; top: auto; width: auto; height: auto;
+    flex-direction: row; border-right: none; border-top: 1px solid var(--line);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); z-index: 50; gap: 0;
+  }
+  .brand, .nav-pie { display: none; }
+  .nav-item {
+    flex-direction: column; gap: 3px; font-size: 10.5px; padding: 6px 2px;
+    justify-content: center; text-align: center;
+  }
+  .nav-item.activo { box-shadow: none; background: none; color: var(--coral); }
+  .nav-item .icono { font-size: 20px; }
+  .nav-item .globo { position: absolute; margin: 0; transform: translate(14px, -10px); }
+  .main { padding: 16px 14px calc(20px + var(--nav-alto)); }
+  .deck-zona { grid-template-columns: 1fr; }
+  .deck { max-height: none; aspect-ratio: 4 / 5.4; }
+  .page-title { font-size: 19px; }
+}

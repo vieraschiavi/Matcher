@@ -1,0 +1,626 @@
+"""API HTTP de Matcher (FastAPI).
+
+Es una cáscara fina: toda la lógica vive en `matcher/`. Cada handler valida la
+entrada, llama al motor y traduce las excepciones del dominio a HTTP. Si algún
+handler empieza a decidir reglas de negocio, la regla va al motor — si no, el
+APK y los tests dejan de ver el mismo comportamiento que la web.
+
+El mismo proceso sirve el frontend compilado (`webapp/frontend/dist`), así que
+en producción no hay CORS ni segundo servidor: una app, un puerto.
+"""
+
+from __future__ import annotations
+
+import os
+import urllib.parse
+from datetime import date
+from pathlib import Path
+
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+from matcher import automatch, demo, geo, medios, oauth, pagos, planes, scoring, seguridad
+from matcher.almacen import Almacen, SinCupo
+from matcher.modelos import (
+    GENEROS,
+    ORIENTACIONES,
+    POLITICAS,
+    DatosInvalidos,
+    Perfil,
+    Preferencias,
+)
+
+RAIZ = Path(__file__).resolve().parents[2]
+DIST = RAIZ / "webapp" / "frontend" / "dist"
+RUTA_BD = os.getenv("MATCHER_BD", str(RAIZ / "datos" / "matcher.db"))
+# La demo se puebla sola al arrancar salvo que se apague explícitamente. Es lo
+# que hace que `uvicorn` + navegador funcione sin ningún paso previo.
+POBLAR_DEMO = os.getenv("MATCHER_DEMO", "1") == "1"
+
+app = FastAPI(title="Matcher API", version="1.0.0")
+
+# En dev el frontend corre en el 5173 con su propio server; en producción se
+# sirve desde acá y esta configuración no aplica.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "capacitor://localhost",   # WebView de Android/iOS
+        "http://localhost",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+_almacen: Almacen | None = None
+
+
+def almacen() -> Almacen:
+    global _almacen
+    if _almacen is None:
+        _almacen = Almacen(RUTA_BD)
+        if POBLAR_DEMO:
+            demo.poblar(_almacen)
+    return _almacen
+
+
+# ---------------------------------------------------------------------------
+# Autenticación
+# ---------------------------------------------------------------------------
+def usuario(authorization: str = Header(default="")) -> Perfil:
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(401, "falta el token de sesión")
+    perfil = almacen().por_token(token)
+    if not perfil:
+        raise HTTPException(401, "sesión inválida o vencida")
+    return perfil
+
+
+# ---------------------------------------------------------------------------
+# Errores del dominio → HTTP
+# ---------------------------------------------------------------------------
+@app.exception_handler(DatosInvalidos)
+async def _datos_invalidos(_: Request, exc: DatosInvalidos):
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(SinCupo)
+async def _sin_cupo(_: Request, exc: SinCupo):
+    # 402 Payment Required. Es literalmente el caso: se acabó el cupo gratis.
+    return JSONResponse(
+        status_code=402,
+        content={
+            "detail": str(exc),
+            "recurso": exc.recurso,
+            "plan_sugerido": exc.plan_sugerido,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Esquemas de entrada
+# ---------------------------------------------------------------------------
+class AltaPreferencias(BaseModel):
+    busca: str = "todos"
+    edad_min: int = 18
+    edad_max: int = 99
+    altura_min_cm: int | None = None
+    altura_max_cm: int | None = None
+    politicas: list[str] = Field(default_factory=list)
+    equipos: list[str] = Field(default_factory=list)
+    solo_mi_pais: bool = False
+    distancia_max_km: int | None = None
+    solo_verificados: bool = False
+    intereses: list[str] = Field(default_factory=list)
+
+
+class Registro(BaseModel):
+    email: str
+    clave: str
+    nombre: str
+    nacimiento: str            # ISO YYYY-MM-DD
+    genero: str
+    altura_cm: int
+    pais: str
+    ciudad: str
+    politica: str = "neutro"
+    equipo: str = ""
+    bio: str = ""
+    intereses: list[str] = Field(default_factory=list)
+    preferencias: AltaPreferencias | None = None
+
+
+class Credenciales(BaseModel):
+    email: str
+    clave: str
+
+
+class CompletarAlta(BaseModel):
+    """Lo que falta después de que el proveedor confirmó el email."""
+
+    alta: str                  # token del alta pendiente
+    nacimiento: str            # ISO YYYY-MM-DD
+    genero: str
+    altura_cm: int
+    pais: str
+    ciudad: str
+    nombre: str | None = None
+    politica: str = "neutro"
+    equipo: str = ""
+    bio: str = ""
+    intereses: list[str] = Field(default_factory=list)
+    preferencias: AltaPreferencias | None = None
+
+
+class CambioPerfil(BaseModel):
+    nombre: str | None = None
+    altura_cm: int | None = None
+    pais: str | None = None
+    ciudad: str | None = None
+    politica: str | None = None
+    equipo: str | None = None
+    bio: str | None = None
+    intereses: list[str] | None = None
+    preferencias: AltaPreferencias | None = None
+
+
+class AltaFoto(BaseModel):
+    url: str
+    bytes: int | None = None
+
+
+class AltaVideo(BaseModel):
+    url: str
+    segundos: float | None = None
+    bytes: int | None = None
+
+
+class Interaccion(BaseModel):
+    a_id: str
+    tipo: str  # like | superfan | pass
+
+
+class AltaMensaje(BaseModel):
+    texto: str
+
+
+class AltaCheckout(BaseModel):
+    plan: str
+    periodo: str = "mensual"
+
+
+class Confirmacion(BaseModel):
+    referencia: str
+
+
+class AltaReporte(BaseModel):
+    a_id: str
+    motivo: str
+    detalle: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Salud y catálogos
+# ---------------------------------------------------------------------------
+@app.get("/api/salud")
+def salud():
+    return {
+        "ok": True,
+        "version": app.version,
+        "perfiles": len(almacen().todos()),
+        "demo": POBLAR_DEMO,
+        "pasarela": os.getenv("MATCHER_PASARELA", "demo"),
+    }
+
+
+@app.get("/api/catalogos")
+def catalogos():
+    """Todo lo que el frontend necesita para armar los selectores. Un solo
+    viaje: en 4G, tres requests para llenar tres combos se nota."""
+    return {
+        "paises": geo.paises_ordenados(),
+        "generos": list(GENEROS),
+        "orientaciones": list(ORIENTACIONES),
+        "politicas": list(POLITICAS),
+        "intereses": demo.INTERESES,
+        "limites": {
+            "fotos": medios.MAX_FOTOS,
+            "videos": medios.MAX_VIDEOS,
+            "segundos_video": medios.MAX_SEGUNDOS_VIDEO,
+        },
+    }
+
+
+@app.get("/api/planes")
+def catalogo_planes():
+    return planes.catalogo()
+
+
+# ---------------------------------------------------------------------------
+# Cuenta
+# ---------------------------------------------------------------------------
+@app.post("/api/registro")
+def registro(datos: Registro):
+    import uuid
+
+    try:
+        nacimiento = date.fromisoformat(datos.nacimiento)
+    except ValueError as e:
+        raise DatosInvalidos("fecha de nacimiento inválida (usá AAAA-MM-DD)") from e
+
+    perfil = Perfil(
+        id=uuid.uuid4().hex[:12],
+        email=datos.email,
+        nombre=datos.nombre,
+        nacimiento=nacimiento,
+        genero=datos.genero,
+        altura_cm=datos.altura_cm,
+        pais=datos.pais,
+        ciudad=datos.ciudad,
+        politica=datos.politica,
+        equipo=datos.equipo,
+        bio=datos.bio,
+        intereses=datos.intereses,
+        preferencias=Preferencias.desde_dict(
+            datos.preferencias.model_dump() if datos.preferencias else None
+        ),
+    )
+    a = almacen()
+    a.crear_perfil(perfil, datos.clave)
+    sesion = a.login(datos.email, datos.clave)
+    if not sesion:  # pragma: no cover — sólo si el hash falla
+        raise HTTPException(500, "no se pudo iniciar sesión tras el registro")
+    _, token = sesion
+    return {"token": token, "perfil": perfil.a_dict(privado=True)}
+
+
+@app.post("/api/login")
+def login(datos: Credenciales):
+    sesion = almacen().login(datos.email, datos.clave)
+    if not sesion:
+        # Mismo mensaje para email inexistente y clave errada: distinguirlos
+        # convierte el login en un enumerador de cuentas.
+        raise HTTPException(401, "email o contraseña incorrectos")
+    perfil, token = sesion
+    return {"token": token, "perfil": perfil.a_dict(privado=True)}
+
+
+# ---------------------------------------------------------------------------
+# Login con proveedor externo (Google)
+# ---------------------------------------------------------------------------
+def _base_publica(request: Request) -> str:
+    """La URL pública del backend, para armar el redirect_uri.
+
+    Se puede fijar con `MATCHER_URL_PUBLICA` y hay que hacerlo detrás de un
+    proxy o en el APK: ahí `request.base_url` es la interna y el proveedor
+    rechaza el callback por redirect_uri distinto al registrado.
+    """
+    return os.getenv("MATCHER_URL_PUBLICA", "").rstrip("/") or str(request.base_url).rstrip("/")
+
+
+@app.get("/api/auth/proveedores")
+def proveedores_de_login():
+    """Sólo los que están configurados de verdad. El frontend no muestra un
+    botón de "Continuar con Google" que no puede funcionar."""
+    return {"proveedores": oauth.disponibles()}
+
+
+@app.get("/api/auth/{nombre}/inicio")
+def iniciar_login(nombre: str, request: Request, destino: str = "/"):
+    url, estado = oauth.url_de_autorizacion(nombre, _base_publica(request), destino)
+    return {"url": url, "state": estado}
+
+
+@app.get("/api/auth/{nombre}/callback")
+def callback_login(
+    nombre: str,
+    request: Request,
+    code: str = "",
+    state: str = "",
+    error: str = "",
+):
+    """Vuelta del proveedor. Termina siempre en una redirección al frontend:
+    con `#/entrar?token=…` si la cuenta ya existe, o con `#/completar?alta=…`
+    si es la primera vez y faltan datos."""
+    base = _base_publica(request)
+    if error:
+        return RedirectResponse(f"{base}/#/entrar?error={urllib.parse.quote(error)}")
+
+    oauth.consumir_estado(state)
+    acceso = oauth.intercambiar_codigo(nombre, code, base)
+    datos = oauth.datos_del_usuario(nombre, acceso)
+
+    a = almacen()
+    perfil = a.buscar_por_email(datos["email"])
+    if perfil:
+        # La cuenta ya existe (por email y clave, o por un login anterior).
+        # Se vincula la identidad y se entra: obligar a poner la contraseña a
+        # quien acaba de probar su email con Google no protege de nada.
+        if not perfil.activo:
+            return RedirectResponse(f"{base}/#/entrar?error=cuenta_desactivada")
+        a.vincular_identidad(nombre, datos["email"], perfil.id)
+        token = a.abrir_sesion(perfil)
+        return RedirectResponse(f"{base}/#/entrar?token={token}")
+
+    alta = a.guardar_alta_pendiente(nombre, datos["email"], datos["nombre"], datos["foto"])
+    return RedirectResponse(f"{base}/#/completar?alta={alta}")
+
+
+@app.get("/api/auth/alta/{token_alta}")
+def leer_alta(token_alta: str):
+    datos = almacen().leer_alta_pendiente(token_alta)
+    if not datos:
+        raise HTTPException(410, "el alta expiró; volvé a entrar con el proveedor")
+    return {
+        "email": datos["email"],
+        "nombre": datos["nombre"],
+        "foto": datos["foto"],
+        "proveedor": datos["proveedor"],
+    }
+
+
+@app.post("/api/auth/completar")
+def completar_alta(datos: CompletarAlta):
+    """Crea la cuenta con el email que ya verificó el proveedor."""
+    import uuid
+
+    a = almacen()
+    pendiente = a.leer_alta_pendiente(datos.alta, consumir=True)
+    if not pendiente:
+        raise HTTPException(410, "el alta expiró; volvé a entrar con el proveedor")
+    try:
+        nacimiento = date.fromisoformat(datos.nacimiento)
+    except ValueError as e:
+        raise DatosInvalidos("fecha de nacimiento inválida (usá AAAA-MM-DD)") from e
+
+    perfil = Perfil(
+        id=uuid.uuid4().hex[:12],
+        email=pendiente["email"],
+        nombre=(datos.nombre or pendiente["nombre"] or "").strip(),
+        nacimiento=nacimiento,
+        genero=datos.genero,
+        altura_cm=datos.altura_cm,
+        pais=datos.pais,
+        ciudad=datos.ciudad,
+        politica=datos.politica,
+        equipo=datos.equipo,
+        bio=datos.bio,
+        intereses=datos.intereses,
+        preferencias=Preferencias.desde_dict(
+            datos.preferencias.model_dump() if datos.preferencias else None
+        ),
+        # El email lo confirmó el proveedor. No es lo mismo que "perfil
+        # verificado" (eso es identidad con documento), así que NO se marca.
+        verificado=False,
+    )
+    # Sin contraseña utilizable: se entra por el proveedor. Si alguna vez quiere
+    # una, va por "olvidé mi contraseña" contra ese email.
+    a.crear_perfil(perfil, seguridad.nuevo_token())
+    a.vincular_identidad(pendiente["proveedor"], perfil.email, perfil.id)
+    token = a.abrir_sesion(perfil)
+    return {"token": token, "perfil": perfil.a_dict(privado=True)}
+
+
+@app.post("/api/logout")
+def logout(authorization: str = Header(default="")):
+    almacen().logout(authorization.removeprefix("Bearer ").strip())
+    return {"ok": True}
+
+
+@app.get("/api/yo")
+def yo(perfil: Perfil = Depends(usuario)):
+    a = almacen()
+    return {
+        "perfil": perfil.a_dict(privado=True),
+        "cupos": a.cupos(perfil),
+        "medios": medios.resumen(perfil),
+    }
+
+
+@app.patch("/api/yo")
+def editar(cambio: CambioPerfil, perfil: Perfil = Depends(usuario)):
+    for campo in ("nombre", "altura_cm", "pais", "ciudad", "politica", "equipo", "bio"):
+        valor = getattr(cambio, campo)
+        if valor is not None:
+            setattr(perfil, campo, valor)
+    if cambio.intereses is not None:
+        perfil.intereses = cambio.intereses
+    if cambio.preferencias is not None:
+        perfil.preferencias = Preferencias.desde_dict(cambio.preferencias.model_dump())
+    almacen().guardar_perfil(perfil)
+    return {"perfil": perfil.a_dict(privado=True)}
+
+
+@app.delete("/api/yo")
+def desactivar(perfil: Perfil = Depends(usuario)):
+    """Baja lógica. No se borra la fila: los matches del otro lado quedarían
+    apuntando a la nada y su chat se rompe."""
+    perfil.activo = False
+    almacen().guardar_perfil(perfil)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Medios
+# ---------------------------------------------------------------------------
+@app.post("/api/yo/fotos")
+def subir_foto(datos: AltaFoto, perfil: Perfil = Depends(usuario)):
+    media = medios.agregar_foto(perfil, datos.url, bytes_=datos.bytes)
+    almacen().guardar_perfil(perfil)
+    return {"media": media.a_dict(), "medios": medios.resumen(perfil)}
+
+
+@app.post("/api/yo/videos")
+def subir_video(datos: AltaVideo, perfil: Perfil = Depends(usuario)):
+    media = medios.agregar_video(
+        perfil, datos.url, segundos=datos.segundos, bytes_=datos.bytes
+    )
+    almacen().guardar_perfil(perfil)
+    return {"media": media.a_dict(), "medios": medios.resumen(perfil)}
+
+
+@app.delete("/api/yo/medios/{id_media}")
+def borrar_media(id_media: str, perfil: Perfil = Depends(usuario)):
+    if not medios.borrar(perfil, id_media):
+        raise HTTPException(404, "no existe ese archivo en tu perfil")
+    almacen().guardar_perfil(perfil)
+    return {"medios": medios.resumen(perfil)}
+
+
+@app.post("/api/yo/medios/orden")
+def reordenar_medios(ids: list[str] = Body(embed=True), perfil: Perfil = Depends(usuario)):
+    medios.reordenar(perfil, ids)
+    almacen().guardar_perfil(perfil)
+    return {"perfil": perfil.a_dict(privado=True)}
+
+
+# ---------------------------------------------------------------------------
+# Deck e interacciones
+# ---------------------------------------------------------------------------
+@app.get("/api/deck")
+def deck(limite: int = 20, perfil: Perfil = Depends(usuario)):
+    a = almacen()
+    a.tocar(perfil.id)
+    return a.deck(perfil, limite=min(max(limite, 1), 50))
+
+
+@app.post("/api/interacciones")
+def interactuar(datos: Interaccion, perfil: Perfil = Depends(usuario)):
+    return almacen().interactuar(perfil, datos.a_id, datos.tipo)
+
+
+@app.post("/api/rebobinar")
+def rebobinar(perfil: Perfil = Depends(usuario)):
+    return almacen().rebobinar(perfil)
+
+
+@app.get("/api/likes-recibidos")
+def likes_recibidos(perfil: Perfil = Depends(usuario)):
+    return almacen().quien_me_dio_like(perfil)
+
+
+@app.get("/api/ranking")
+def ranking(limite: int = 20):
+    """"Más votados". Público a propósito: es la vitrina de la app y lo que
+    la hace divertida de mirar aunque no estés swipeando."""
+    return {"top": scoring.top_votados(almacen().todos(), min(max(limite, 1), 50))}
+
+
+# ---------------------------------------------------------------------------
+# Match automático
+# ---------------------------------------------------------------------------
+@app.get("/api/automatch/sugerencias")
+def sugerencias_automatch(perfil: Perfil = Depends(usuario)):
+    a = almacen()
+    salida = automatch.sugerencias(a, perfil)
+    return {
+        "umbral": automatch.UMBRAL,
+        "cupos": a.cupos(perfil),
+        "sugerencias": [
+            s["perfil"].a_dict()
+            | {"compatibilidad": s["compatibilidad"], "motivos": s["motivos"]}
+            for s in salida
+        ],
+    }
+
+
+@app.post("/api/automatch")
+def correr_automatch(perfil: Perfil = Depends(usuario)):
+    a = almacen()
+    creados = automatch.proponer(a, perfil)
+    return {"creados": creados, "cupos": a.cupos(perfil)}
+
+
+# ---------------------------------------------------------------------------
+# Matches y chat
+# ---------------------------------------------------------------------------
+@app.get("/api/matches")
+def lista_matches(perfil: Perfil = Depends(usuario)):
+    return {"matches": almacen().matches_de(perfil.id)}
+
+
+@app.get("/api/matches/{match_id}/mensajes")
+def leer_chat(match_id: str, perfil: Perfil = Depends(usuario)):
+    return {"mensajes": almacen().conversacion(match_id, perfil)}
+
+
+@app.post("/api/matches/{match_id}/mensajes")
+def escribir_chat(match_id: str, datos: AltaMensaje, perfil: Perfil = Depends(usuario)):
+    m = almacen().enviar_mensaje(match_id, perfil, datos.texto)
+    return {"mensaje": m.a_dict()}
+
+
+@app.delete("/api/matches/{match_id}")
+def borrar_match(match_id: str, perfil: Perfil = Depends(usuario)):
+    almacen().deshacer_match(match_id, perfil)
+    return {"ok": True}
+
+
+@app.post("/api/reportes")
+def reportar(datos: AltaReporte, perfil: Perfil = Depends(usuario)):
+    almacen().reportar(perfil, datos.a_id, datos.motivo, datos.detalle)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Pagos
+# ---------------------------------------------------------------------------
+@app.post("/api/pagos/checkout")
+def checkout(datos: AltaCheckout, perfil: Perfil = Depends(usuario)):
+    return {"checkout": pagos.iniciar(almacen(), perfil, datos.plan, datos.periodo).a_dict()}
+
+
+@app.post("/api/pagos/confirmar")
+def confirmar_pago(datos: Confirmacion, perfil: Perfil = Depends(usuario)):
+    a = almacen()
+    resultado = pagos.confirmar(a, perfil, datos.referencia)
+    return {"resultado": resultado, "perfil": a.perfil(perfil.id).a_dict(privado=True)}
+
+
+@app.post("/api/pagos/cancelar")
+def cancelar_plan(perfil: Perfil = Depends(usuario)):
+    return pagos.cancelar(almacen(), perfil)
+
+
+@app.get("/api/pagos")
+def historial_pagos(perfil: Perfil = Depends(usuario)):
+    return {"pagos": almacen().pagos_de(perfil.id)}
+
+
+# ---------------------------------------------------------------------------
+# Frontend compilado
+# ---------------------------------------------------------------------------
+if DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
+
+    @app.get("/")
+    def raiz():
+        return FileResponse(DIST / "index.html")
+
+    @app.get("/{ruta:path}")
+    def spa(ruta: str):
+        """HashRouter, así que todo lo que no sea /api cae en index.html."""
+        archivo = DIST / ruta
+        if archivo.is_file():
+            return FileResponse(archivo)
+        return FileResponse(DIST / "index.html")
+
+
+def main() -> None:  # pragma: no cover
+    import uvicorn
+
+    uvicorn.run(
+        app,
+        host=os.getenv("MATCHER_HOST", "127.0.0.1"),
+        port=int(os.getenv("MATCHER_PUERTO", "8820")),
+    )
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()

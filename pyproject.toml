@@ -1,0 +1,34 @@
+[tool.ruff]
+# Linter del proyecto:  ruff check .
+target-version = "py311"
+line-length = 100
+extend-exclude = [
+    "android",
+    "ios",
+    "electron/node_modules",
+    "webapp/frontend/node_modules",
+    "webapp/frontend/dist",
+    "node_modules",
+    "dist",
+    "datos",
+]
+
+[tool.ruff.lint]
+# E,F = pycodestyle + pyflakes · I = orden de imports · B = bugbear
+# UP = modismos viejos · C4 = comprensiones innecesarias
+select = ["E", "F", "I", "B", "UP", "C4"]
+ignore = [
+    # Líneas largas: los comentarios explican en prosa y cortarlos a la fuerza
+    # los vuelve ilegibles. El largo lo cuida `line-length` al formatear.
+    "E501",
+    # Depends(...) en un default de argumento es LA forma de declarar una
+    # dependencia en FastAPI, no un descuido.
+    "B008",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["matcher", "webapp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
