@@ -55,14 +55,27 @@ POBLAR_DEMO = os.getenv("MATCHER_DEMO", "1") == "1"
 
 app = FastAPI(title="Matcher API", version="1.0.0")
 
-# En dev el frontend corre en el 5173 con su propio server; en producción se
-# sirve desde acá y esta configuración no aplica.
+# Orígenes permitidos.
+#
+# Cuando la web se sirve desde este mismo proceso no hay CORS que valga (es
+# same-origin). Esta lista existe por dos casos: el frontend en modo dev y —el
+# que importa— el WebView de la app instalada, que NO es same-origin: el
+# bundle vive local y el backend está en otro dominio.
+#
+# El origen del WebView depende del `androidScheme`/`iosScheme` de
+# capacitor.config.json. Con "https" (que es lo recomendado, porque habilita
+# las APIs que exigen contexto seguro: cámara y geolocalización) el origen
+# es **https://localhost**, no capacitor://localhost. Faltaba justo ese y la
+# app instalada moría con "Failed to fetch" en el login, sin más pista.
+# Van los dos esquemas para que un cambio de configuración no lo rompa igual.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "capacitor://localhost",   # WebView de Android/iOS
+        "https://localhost",        # WebView con androidScheme/iosScheme https
+        "capacitor://localhost",    # WebView con el esquema capacitor://
+        "ionic://localhost",
         "http://localhost",
     ],
     allow_credentials=True,

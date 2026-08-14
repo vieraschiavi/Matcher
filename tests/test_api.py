@@ -301,3 +301,24 @@ def test_ranking_es_publico(cliente):
     top = r.json()["top"]
     assert len(top) == 5
     assert top == sorted(top, key=lambda x: -x["popularidad"])
+
+
+def test_el_webview_de_la_app_puede_hablar_con_la_api(cliente):
+    """El origen del WebView tiene que estar permitido por CORS.
+
+    Con `androidScheme: https` el WebView de la app instalada pide desde
+    `https://localhost`. Ese origen faltaba en la lista y la app moría con
+    "Failed to fetch" en el login — sin error de servidor, sin log, sin nada
+    que apuntara al problema. Se prueban los dos esquemas posibles porque
+    cambiar capacitor.config.json cambia el origen.
+    """
+    for origen in ("https://localhost", "capacitor://localhost"):
+        r = cliente.post(
+            "/api/login",
+            json={"email": "vieraschiavi@gmail.com", "clave": demo.CLAVE_DEMO},
+            headers={"Origin": origen},
+        )
+        assert r.status_code == 200, r.text
+        assert r.headers.get("access-control-allow-origin") == origen, (
+            f"CORS bloquea a {origen}: la app instalada no puede entrar"
+        )
