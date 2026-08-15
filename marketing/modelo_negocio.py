@@ -18,7 +18,7 @@ supuesto** manda el resultado — y ese, en todos los escenarios, es el mismo.
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from matcher import planes
@@ -131,18 +131,50 @@ class Escenario:
     share_tienda: float               # pagos que pasan por Apple/Google
     horas_propias: float = 0.0        # horas/mes de trabajo propio no pagado
 
+    # ── Palanca de precio ────────────────────────────────────────────────
+    # Cuánto se multiplican los precios de `matcher.planes`. 1.0 = los de hoy.
+    # Subir el precio NO es gratis y el modelo tiene que decirlo: cobrar más
+    # espanta gente antes de pagar (elasticidad de conversión) y hace que el
+    # que ya paga aguante menos (elasticidad de churn). Un modelo que sube el
+    # precio y deja la conversión quieta siempre "demuestra" que hay que
+    # cobrar más, y es mentira.
+    multiplicador_precio: float = 1.0
+    # 1,0 = elástico puro (al doble de precio, la mitad de conversión, la
+    # facturación no se mueve). Abajo de 1 conviene subir; arriba, no. Se
+    # asume 0,8: Matcher se compara contra una competencia mucho más cara, así
+    # que aguanta algo de suba antes de que la gente se vaya.
+    elasticidad_conversion: float = 0.8
+    # Cuánto se acelera la baja del suscriptor al subir el precio.
+    elasticidad_churn: float = 0.25
+
+    @property
+    def conversion_efectiva(self) -> float:
+        return self.conversion_mensual * self.multiplicador_precio ** (
+            -self.elasticidad_conversion
+        )
+
+    @property
+    def churn_suscriptor_efectivo(self) -> float:
+        return min(
+            0.95,
+            self.churn_suscriptor * self.multiplicador_precio ** self.elasticidad_churn,
+        )
+
     @property
     def conversion_de_por_vida(self) -> float:
         """De cada 100 registrados, cuántos llegan alguna vez a pagar. Sale de
         competir la conversión mensual contra la baja del padrón."""
-        total = self.conversion_mensual + self.churn_usuario
-        return self.conversion_mensual / total if total else 0.0
+        total = self.conversion_efectiva + self.churn_usuario
+        return self.conversion_efectiva / total if total else 0.0
 
     @property
     def share_pagador(self) -> float:
         """Qué porcentaje del padrón activo está pagando, en estado estable."""
-        total = self.conversion_mensual + self.churn_suscriptor
-        return self.conversion_mensual / total if total else 0.0
+        total = self.conversion_efectiva + self.churn_suscriptor_efectivo
+        return self.conversion_efectiva / total if total else 0.0
+
+    def precio(self, codigo: str) -> float:
+        return planes.PLANES[codigo].precio_mes * self.multiplicador_precio
 
     # Cuánto vale un suscriptor por mes, ya neto de comisión.
     def arpu_bruto(self) -> float:
@@ -152,7 +184,8 @@ class Escenario:
             (1 - self.mezcla_gold) * plus.precio_mes_en_anual
             + self.mezcla_gold * gold.precio_mes_en_anual
         )
-        return (1 - self.mezcla_anual) * mensual + self.mezcla_anual * anual
+        base = (1 - self.mezcla_anual) * mensual + self.mezcla_anual * anual
+        return base * self.multiplicador_precio
 
     def comision(self, facturacion_anualizada: float = 0.0) -> float:
         tienda = (
@@ -293,8 +326,10 @@ def correr(e: Escenario) -> Corrida:
     usuarios = 0.0
     suscriptores = 0.0
     corrida = Corrida(escenario=e)
-    perdida_arrastrada = 0.0
-    resultado_del_anio = 0.0
+    # Resultado fiscal acumulado desde el arranque. Mientras sea negativo hay
+    # pérdida para compensar y no se paga IRAE; la ley uruguaya deja
+    # arrastrarla hasta 5 años, o sea todo el horizonte de este modelo.
+    fiscal_acumulado = 0.0
 
     for numero in range(1, MESES + 1):
         marketing = e.presupuesto[numero - 1]
@@ -306,8 +341,10 @@ def correr(e: Escenario) -> Corrida:
         # Los que pagan salen de la base GRATIS activa, no del alta del mes: la
         # suscripción se compra cuando ya te importa quién te dio like.
         libres = max(0.0, usuarios - suscriptores)
-        nuevos = libres * e.conversion_mensual
-        suscriptores = min(usuarios, suscriptores * (1 - e.churn_suscriptor) + nuevos)
+        nuevos = libres * e.conversion_efectiva
+        suscriptores = min(
+            usuarios, suscriptores * (1 - e.churn_suscriptor_efectivo) + nuevos
+        )
 
         bruto = suscriptores * e.arpu_bruto()
         neto = suscriptores * e.arpu_neto(bruto * 12)
@@ -332,18 +369,18 @@ def correr(e: Escenario) -> Corrida:
         costo = marketing + infra + moderacion + fijos
         resultado = neto - costo
 
-        # IRAE: se liquida sobre el resultado del ejercicio, compensando pérdidas
-        # de ejercicios anteriores. Se imputa en el mes 12 y en el 24.
-        impuesto = 0.0
-        resultado_del_anio += resultado
-        if numero in (12, 24):
-            base = resultado_del_anio - perdida_arrastrada
-            if base > 0:
-                impuesto = base * IRAE
-                perdida_arrastrada = 0.0
-            else:
-                perdida_arrastrada = -base
-            resultado_del_anio = 0.0
+        # IRAE, provisionado mes a mes.
+        #
+        # La primera versión cargaba el impuesto de todo el ejercicio en el mes
+        # 12 y en el 24, y eso pintaba de rojo un mes que operativamente estaba
+        # en verde: con eso, "¿desde qué mes es rentable?" daba "nunca" en un
+        # escenario que ganaba plata todos los meses. El impuesto se devenga
+        # con la ganancia, así que se provisiona sobre el incremento de la base
+        # gravable — que recién existe cuando el acumulado fiscal se dio vuelta
+        # y quedaron compensadas las pérdidas anteriores.
+        gravable_antes = max(0.0, fiscal_acumulado)
+        fiscal_acumulado += resultado
+        impuesto = (max(0.0, fiscal_acumulado) - gravable_antes) * IRAE
 
         corrida.meses.append(
             Mes(
@@ -377,9 +414,9 @@ def suscriptores_para_equilibrio(e: Escenario, mes: Mes) -> float:
 def padron_para_equilibrio(e: Escenario, mes: Mes) -> float:
     """Cuánta gente activa hace falta para que salgan esos suscriptores."""
     objetivo = suscriptores_para_equilibrio(e, mes)
-    if not e.conversion_mensual:
+    if not e.conversion_efectiva:
         return float("inf")
-    libres = objetivo * e.churn_suscriptor / e.conversion_mensual
+    libres = objetivo * e.churn_suscriptor_efectivo / e.conversion_efectiva
     return libres + objetivo
 
 
@@ -392,9 +429,9 @@ def altas_para_equilibrio(e: Escenario, mes: Mes) -> float:
 
 def ltv(e: Escenario) -> float:
     """Valor de un suscriptor a lo largo de su vida, neto de comisión."""
-    if not e.churn_suscriptor:
+    if not e.churn_suscriptor_efectivo:
         return float("inf")
-    return e.arpu_neto() / e.churn_suscriptor
+    return e.arpu_neto() / e.churn_suscriptor_efectivo
 
 
 def cac_por_alta(e: Escenario) -> float:
@@ -407,6 +444,53 @@ def cac_por_pagador(e: Escenario) -> float:
     No todos los registrados pagan: sólo la fracción de por vida."""
     conv = e.conversion_de_por_vida
     return cac_por_alta(e) / conv if conv else float("inf")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ¿Alcanza con subir el precio?
+# ─────────────────────────────────────────────────────────────────────────────
+
+TECHO_MULTIPLICADOR = 12.0
+PASO_MULTIPLICADOR = 0.01
+
+
+def rentable_desde(corrida: Corrida, mes: int) -> bool:
+    """Verde en ese mes y en TODOS los que siguen. 'Rentable desde el mes 6'
+    no puede significar un mes bueno suelto y después rojo de nuevo."""
+    return all(m.resultado_neto >= 0 for m in corrida.meses[mes - 1 :])
+
+
+def multiplicador_para_rentable_desde(
+    e: Escenario, mes: int, techo: float = TECHO_MULTIPLICADOR
+) -> float | None:
+    """El precio más bajo que deja el negocio en verde a partir de ese mes.
+
+    Se barre en vez de hacer búsqueda binaria a propósito: con elasticidad, la
+    curva de resultado contra precio NO es monótona —a partir de cierto punto
+    subir el precio espanta más gente de la que compensa— así que una binaria
+    puede saltearse la ventana donde sí funciona, o peor, encontrar un punto
+    del otro lado del máximo.
+    """
+    m = 1.0
+    while m <= techo + 1e-9:
+        if rentable_desde(correr(replace(e, multiplicador_precio=m)), mes):
+            return round(m, 2)
+        m += PASO_MULTIPLICADOR
+    return None
+
+
+def recorte_pauta_para_rentable_desde(
+    e: Escenario, mes: int
+) -> float | None:
+    """La otra palanca: en vez de cobrar más, gastar menos en pauta. Devuelve
+    qué fracción del presupuesto hay que dejar (0,4 = recortar el 60 %)."""
+    fraccion = 1.0
+    while fraccion >= -1e-9:
+        alt = replace(e, presupuesto=[x * fraccion for x in e.presupuesto])
+        if rentable_desde(correr(alt), mes):
+            return round(fraccion, 2)
+        fraccion -= 0.01
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -566,12 +650,15 @@ def generar(corridas: list[Corrida]) -> str:
     fila("Instalaciones que se registran", lambda e: _pct(e.alta_por_instalacion))
     fila("Altas orgánicas base por mes", lambda e: _n(e.organicos_base))
     fila("Altas extra por usuario activo/mes (boca a boca)", lambda e: _d(e.factor_viral, 3))
-    fila("Un gratis empieza a pagar (por mes)", lambda e: _pct(e.conversion_mensual))
+    fila("Un gratis empieza a pagar (por mes)", lambda e: _pct(e.conversion_efectiva))
     fila("De cada 100 registrados, llegan a pagar", lambda e: _pct(e.conversion_de_por_vida))
     fila("Padrón activo que paga (estado estable)", lambda e: _pct(e.share_pagador))
     fila("Baja mensual del padrón", lambda e: _pct(e.churn_usuario))
-    fila("Baja mensual del suscriptor", lambda e: _pct(e.churn_suscriptor))
-    fila("Vida media del suscriptor", lambda e: f"{_d(1 / e.churn_suscriptor, 1)} meses")
+    fila("Baja mensual del suscriptor", lambda e: _pct(e.churn_suscriptor_efectivo))
+    fila(
+        "Vida media del suscriptor",
+        lambda e: f"{_d(1 / e.churn_suscriptor_efectivo, 1)} meses",
+    )
     fila("Mezcla Gold", lambda e: _pct(e.mezcla_gold))
     fila("Pagan plan anual", lambda e: _pct(e.mezcla_anual))
     fila("Pagos por tienda (vs. web)", lambda e: _pct(e.share_tienda))
@@ -728,7 +815,7 @@ def generar(corridas: list[Corrida]) -> str:
         a("")
         a(f"ARPU neto: **USD {_d(e.arpu_neto())}** por suscriptor y mes · "
           f"paga el **{_pct(e.share_pagador)}** del padrón · "
-          f"baja del suscriptor **{_pct(e.churn_suscriptor)}**/mes · "
+          f"baja del suscriptor **{_pct(e.churn_suscriptor_efectivo)}**/mes · "
           f"baja del padrón **{_pct(e.churn_usuario)}**/mes.")
         a("")
         a("| Corte | Costo del mes | Suscriptores necesarios | Los que habría | "
@@ -751,7 +838,8 @@ def generar(corridas: list[Corrida]) -> str:
         estructura = m12.costo_total - m12.marketing
         s_estructura = estructura / e.arpu_neto()
         p_estructura = (
-            s_estructura * e.churn_suscriptor / e.conversion_mensual + s_estructura
+            s_estructura * e.churn_suscriptor_efectivo / e.conversion_efectiva
+            + s_estructura
         )
         a(f"- Costo de estructura en el mes 12, sin un peso de marketing: **USD {_u(estructura)}**.")
         a(f"- Suscriptores necesarios: **{_n(s_estructura)}**.")
@@ -771,8 +859,6 @@ def generar(corridas: list[Corrida]) -> str:
     a("")
     a("| Cambio | Acumulado a 24 meses | Diferencia |")
     a("|---|---:|---:|")
-    from dataclasses import replace
-
     variaciones = [
         ("Churn del suscriptor −25 % (dura más)", {"churn_suscriptor": base.churn_suscriptor * 0.75}),
         ("Churn del suscriptor +25 % (dura menos)", {"churn_suscriptor": base.churn_suscriptor * 1.25}),
@@ -783,6 +869,8 @@ def generar(corridas: list[Corrida]) -> str:
         ("Doble presupuesto de pauta", {"presupuesto": [x * 2 for x in base.presupuesto]}),
         ("Cero pauta (sólo orgánico)", {"presupuesto": [0.0] * MESES}),
         ("Todos los pagos por la web (sin comisión de tienda)", {"share_tienda": 0.0}),
+        ("Precio × 2 (con su efecto en conversión y churn)", {"multiplicador_precio": 2.0}),
+        ("Precio × 4", {"multiplicador_precio": 4.0}),
     ]
     for etiqueta, cambio in variaciones:
         alt = correr(replace(base, **cambio)).acumulado(24)
@@ -808,8 +896,184 @@ def generar(corridas: list[Corrida]) -> str:
     a("mejora de conversión: son 10 puntos de comisión sobre cada peso cobrado.")
     a("")
 
+    # ── ¿Subir el precio? ───────────────────────────────────────────────────
+    a("## 9. ¿Alcanza con subir el precio para estar en verde desde el mes 6?")
+    a("")
+    a("La pregunta es buena y el modelo la puede contestar en vez de opinar.")
+    a("«Rentable desde el mes 6» se toma en serio: verde ese mes **y todos los")
+    a("que siguen**, no un mes bueno suelto.")
+    a("")
+    a("### Cómo se modela una suba de precio sin hacer trampa")
+    a("")
+    a("Subir el precio no es gratis y el modelo tiene que decirlo. Cobrar más")
+    a("espanta gente antes de que pague (elasticidad de conversión) y hace que el")
+    a("que ya paga aguante menos (elasticidad de churn). Un modelo que sube el")
+    a("precio dejando la conversión quieta siempre «demuestra» que hay que cobrar")
+    a(f"más, y es mentira. Acá se asume elasticidad **{_d(base.elasticidad_conversion, 1)}**:")
+    a("al doble de precio, la conversión cae a poco más de la mitad. Menos de 1")
+    a("porque Matcher se compara contra una competencia mucho más cara, así que")
+    a("aguanta algo de suba antes de que la gente se vaya.")
+    a("")
+    a("### La respuesta corta: no, y el precio no es el problema")
+    a("")
+    a("| Escenario | Precio mínimo para estar en verde desde el mes 6 (con la pauta del plan) |")
+    a("|---|---|")
+    for c in corridas:
+        mult = multiplicador_para_rentable_desde(c.escenario, 6)
+        if mult is None:
+            texto = (
+                f"**No se llega**, ni multiplicando el precio por "
+                f"{_n(TECHO_MULTIPLICADOR)} (Plus a USD "
+                f"{_d(planes.PLANES['plus'].precio_mes * TECHO_MULTIPLICADOR)})"
+            )
+        else:
+            alt = replace(c.escenario, multiplicador_precio=mult)
+            texto = f"× {_d(mult)} → Plus USD {_d(alt.precio('plus'))}"
+        a(f"| {c.escenario.nombre} | {texto} |")
+    a("")
+    a("Por qué. En el mes 6 del escenario Base el costo se reparte así:")
+    a("")
+    m6 = next(c for c in corridas if c.escenario.codigo == "base").mes(6)
+    a(f"- Marketing: **USD {_u(m6.marketing)}** de un costo total de USD {_u(m6.costo_total)}.")
+    a(f"- Todo lo demás (infra, moderación, fijos): USD {_u(m6.costo_total - m6.marketing)}.")
+    a(f"- Ingreso neto de ese mes: USD {_u(m6.ingreso_neto)}, de {_n(m6.suscriptores)} suscriptores.")
+    a("")
+    a("El agujero del mes 6 **es la pauta**, no el precio. Y subir el precio casi")
+    a("no mueve el ingreso, porque lo que se gana por suscriptor se pierde en")
+    a("suscriptores:")
+    a("")
+    a("| Precio Plus | Conversión efectiva | Suscriptores en el mes 6 | Ingreso neto del mes 6 |")
+    a("|---:|---:|---:|---:|")
+    for mult in (1.0, 1.5, 2.0, 4.0, 8.0, 12.0):
+        alt = replace(base, multiplicador_precio=mult)
+        mes6 = correr(alt).mes(6)
+        a(
+            f"| USD {_d(alt.precio('plus'))} | {_pct(alt.conversion_efectiva)} "
+            f"| {_n(mes6.suscriptores)} | USD {_u(mes6.ingreso_neto)} |"
+        )
+    a("")
+    a("De USD 3,99 a USD 47,88 el ingreso del mes 6 se mueve una miseria. **No")
+    a("hay precio que arregle un mes en el que se gastan USD 600 en publicidad")
+    a("para conseguir 60 suscriptores.**")
+    a("")
+    a("### La respuesta larga: el mes 6 en verde ya es alcanzable, y sin tocar el precio")
+    a("")
+    a("La palanca que sí funciona es la otra: gastar menos en pauta.")
+    a("")
+    a("| Escenario | Recorte de pauta para estar en verde desde el mes 6 | Sin pauta: primer mes en verde |")
+    a("|---|---|---:|")
+    for c in corridas:
+        e = c.escenario
+        fraccion = recorte_pauta_para_rentable_desde(e, 6)
+        recorte = (
+            f"recortar **{_pct(1 - fraccion)}**"
+            if fraccion is not None
+            else "no alcanza ni recortando todo"
+        )
+        sin = correr(replace(e, presupuesto=[0.0] * MESES))
+        primero = next((m.numero for m in sin.meses if rentable_desde(sin, m.numero)), None)
+        a(f"| {e.nombre} | {recorte} | {'mes ' + str(primero) if primero else 'nunca'} |")
+    a("")
+    sin_base = correr(replace(base, presupuesto=[0.0] * MESES))
+    primero_base = next(
+        (m.numero for m in sin_base.meses if rentable_desde(sin_base, m.numero)), None
+    )
+    a("**El escenario Base, sin gastar un peso en publicidad, queda en verde")
+    a(f"desde el mes {primero_base} y no vuelve a rojo — con el precio de hoy, USD")
+    a(f"{_d(planes.PLANES['plus'].precio_mes)}.** Lo que pedís ya se puede, y no")
+    a("hace falta cobrar más para conseguirlo: hace falta no comprar usuarios que")
+    a("cuestan más de lo que dejan.")
+    a("")
+    a("### Y si igual querés subir el precio, cuál es el óptimo")
+    a("")
+    a("Sobre el escenario Base sin pauta, barriendo el precio y quedándose con el")
+    a("mejor acumulado a 24 meses:")
+    a("")
+    a("| Precio Plus | Precio Gold | Suscriptores mes 24 | Acumulado 24 meses |")
+    a("|---:|---:|---:|---:|")
+    sin = replace(base, presupuesto=[0.0] * MESES)
+    for mult in (1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 6.0):
+        alt = replace(sin, multiplicador_precio=mult)
+        c_alt = correr(alt)
+        a(
+            f"| USD {_d(alt.precio('plus'))} | USD {_d(alt.precio('gold'))} "
+            f"| {_n(c_alt.mes(24).suscriptores)} | USD {_u(c_alt.acumulado(24))} |"
+        )
+    a("")
+    mejor_mult, mejor_valor = 1.0, correr(sin).acumulado(24)
+    paso = 0.05
+    m = 1.0
+    while m <= TECHO_MULTIPLICADOR + 1e-9:
+        valor = correr(replace(sin, multiplicador_precio=m)).acumulado(24)
+        if valor > mejor_valor:
+            mejor_mult, mejor_valor = m, valor
+        m += paso
+    mejor_esc = replace(sin, multiplicador_precio=mejor_mult)
+    a(f"El óptimo cae en **× {_d(mejor_mult)}** —Plus a USD")
+    a(f"{_d(mejor_esc.precio('plus'))}, Gold a USD {_d(mejor_esc.precio('gold'))}— y")
+    a(f"deja USD {_u(mejor_valor)} contra USD {_u(correr(sin).acumulado(24))} sin")
+    a(f"tocar nada: **USD {_u(mejor_valor - correr(sin).acumulado(24))} de diferencia")
+    a("en dos años.** Nada. La curva es tan chata que el precio, en este rango, es")
+    a("casi indiferente para el resultado — y en cambio sí decide con qué")
+    a("argumento salís a competir.")
+    a("")
+    a("### Dónde se da vuelta esta conclusión")
+    a("")
+    a("Todo esto depende de un número que **no está medido**: la elasticidad. Si")
+    a("la gente fuera menos sensible al precio de lo que supone el modelo —cosa")
+    a("posible, porque la competencia sale 4 veces más— subir convendría, y mucho:")
+    a("")
+    a("| Elasticidad supuesta | Precio Plus óptimo | Acumulado 24 meses | Contra USD "
+      + _u(correr(sin).acumulado(24)) + " sin tocar |")
+    a("|---:|---:|---:|---:|")
+    referencia_sin = correr(sin).acumulado(24)
+    for el in (0.3, 0.5, 0.8, 1.0, 1.3):
+        s = replace(sin, elasticidad_conversion=el)
+        mm, mv = 1.0, correr(s).acumulado(24)
+        m = 1.0
+        while m <= TECHO_MULTIPLICADOR + 1e-9:
+            v = correr(replace(s, multiplicador_precio=m)).acumulado(24)
+            if v > mv:
+                mm, mv = m, v
+            m += paso
+        # Cuando el óptimo cae en el tope del barrido no es un óptimo, es el
+        # borde: hay que decirlo o la tabla se lee como una recomendación de
+        # cobrar USD 48 por Matcher Plus.
+        tope = " *(tope del barrido)*" if mm >= TECHO_MULTIPLICADOR - paso else ""
+        a(
+            f"| {_d(el, 1)} | USD {_d(planes.PLANES['plus'].precio_mes * mm)}{tope} "
+            f"| USD {_u(mv)} | {'+' if mv >= referencia_sin else ''}{_u(mv - referencia_sin)} |"
+        )
+    a("")
+    a("Las filas marcadas *(tope del barrido)* no son un óptimo sino el borde de")
+    a("la búsqueda: con esa elasticidad al modelo le conviene seguir subiendo más")
+    a("allá de donde tiene sentido mirar. Léelas como «convendría subir bastante»,")
+    a("no como «cobrá USD 48».")
+    a("")
+    a("O sea: **la respuesta a «¿subo el precio?» depende de un dato que hoy no")
+    a("tenés, y que se puede medir.** Un test A/B de precio con usuarios reales")
+    a("—mismo producto, dos precios, mirar conversión a 60 días— vale más que")
+    a("cualquier cosa que diga esta tabla. Ese test cuesta cero: son dos precios")
+    a("en la pantalla de planes.")
+    a("")
+    a("### Lo que sí conviene hacer con el precio, cueste lo que cueste medirlo")
+    a("")
+    comp = min(r["precio_mes_aprox"] for r in planes.REFERENCIA_COMPETENCIA)
+    a("1. **Empujar el plan anual.** Ya está: cobra por adelantado, elimina el")
+    a("   churn mensual y esquiva la comisión si se paga por la web. Es la suba de")
+    a("   ingreso por suscriptor más barata que hay, porque no toca el precio de")
+    a("   lista.")
+    a("2. **Mover pagos de la tienda a la web.** Son 10 puntos de comisión, que a")
+    a("   estos volúmenes valen más que cualquier ajuste de precio.")
+    a("3. **Si subís, subí poco y de una vez.** Hasta USD 5,99–7,99 el Plus seguís")
+    a(f"   abajo de la mitad del más barato de la competencia (USD {_d(comp)} de")
+    a("   referencia, sin verificar), así que el argumento comercial se sostiene.")
+    a("   Arriba de eso dejás de ser «lo mismo por una fracción» y pasás a competir")
+    a("   de igual a igual con marcas que tienen mil veces tu presupuesto.")
+    a("")
+
     # ── Trabajo propio ──────────────────────────────────────────────────────
-    a("## 9. El costo que el modelo no cobra: tu tiempo")
+    a("## 10. El costo que el modelo no cobra: tu tiempo")
     a("")
     a("Ninguno de los números de arriba descuenta el trabajo propio. Si se")
     a("valorizara a USD 15 la hora:")
@@ -826,7 +1090,7 @@ def generar(corridas: list[Corrida]) -> str:
     a("")
 
     # ── Conclusión ──────────────────────────────────────────────────────────
-    a("## 10. Conclusión honesta")
+    a("## 11. Conclusión honesta")
     a("")
     ltv_min = min(ltv(c.escenario) for c in corridas)
     ltv_max = max(ltv(c.escenario) for c in corridas)
@@ -838,17 +1102,22 @@ def generar(corridas: list[Corrida]) -> str:
     a("   conviene mirar de frente: **elimina la publicidad paga como motor de")
     a("   crecimiento**. Con USD 4 de suscripción no se compra un usuario a USD 2")
     a("   y se gana plata; con los USD 16 que cobra Tinder, sí.")
-    a("2. **El único camino que cierra es la densidad orgánica.** Una zona chica,")
+    a("2. **Subir el precio no arregla eso** (sección 9). Con la pauta puesta no")
+    a("   hay precio —ni multiplicando por 12— que ponga el mes 6 en verde,")
+    a("   porque el agujero de ese mes es la publicidad. Y sin pauta, el mes 6")
+    a("   ya está en verde con el precio de hoy. El precio decide con qué")
+    a("   argumento salís a competir; el resultado lo decide otra cosa.")
+    a("3. **El único camino que cierra es la densidad orgánica.** Una zona chica,")
     a("   presencia real, boca a boca. Es más lento y menos glamoroso que")
     a("   apretar 'aumentar presupuesto', y en este modelo es la diferencia entre")
     a(f"   terminar en USD {_u(sin_pauta)} o en USD {_u(referencia)}.")
-    a("3. **Antes de gastar un peso en pauta hay tres cosas sin resolver** y")
+    a("4. **Antes de gastar un peso en pauta hay tres cosas sin resolver** y")
     a("   están todas en `docs/PUBLICAR.md`: el backend efímero (las cuentas y")
     a("   las fotos se pierden en cada arranque en frío), la moderación")
     a("   inexistente y las fotos guardadas dentro de la base. Publicitar una app")
     a("   con esos tres problemas quema el dinero y la reputación a la vez: el")
     a("   usuario que se va por una mala primera impresión no vuelve.")
-    a("4. **El orden correcto es**: backend con disco → moderación → 200 usuarios")
+    a("5. **El orden correcto es**: backend con disco → moderación → 200 usuarios")
     a("   reales en un radio de pocos kilómetros → medir conversión y churn de")
     a("   verdad → recién ahí volver a este archivo, reemplazar los supuestos por")
     a("   lo medido y correrlo de nuevo. Ese, y no el número de hoy, es el")

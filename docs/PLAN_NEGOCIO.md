@@ -193,7 +193,7 @@ descuenta el trabajo propio** — eso va aparte, al final.
 | **Optimista** (acumulado) | USD -1.622 | USD -3.074 | USD -6.877 | USD -6.624 | USD -8.175 | USD 9.700 |
 | Pesimista (ese mes) | USD -284 | USD -476 | USD -471 | USD -468 | USD -467 | USD -467 |
 | Base (ese mes) | USD -316 | USD -492 | USD -977 | USD -857 | USD -1.414 | USD -1.295 |
-| Optimista (ese mes) | USD -267 | USD -204 | USD -865 | USD 549 | USD 1.499 | USD 1.517 |
+| Optimista (ese mes) | USD -267 | USD -204 | USD -865 | USD 549 | USD 1.499 | USD 3.563 |
 
 | Escenario | Primer mes en verde | Recupera todo lo invertido | Peor pozo |
 |---|---:|---:|---:|
@@ -291,10 +291,10 @@ motivo por el que subir el presupuesto no es una palanca gratis.
 | 18 | 5.805 | 27.774 | 1.997 | 9.551 | 8.375 | 6.000 | 281 | 533 | 61 | 0 | 1.499 | -8.175 |
 | 19 | 5.894 | 29.224 | 2.157 | 10.314 | 9.044 | 6.000 | 289 | 549 | 61 | 0 | 2.145 | -6.030 |
 | 20 | 5.974 | 30.522 | 2.306 | 11.030 | 9.672 | 6.000 | 296 | 563 | 61 | 0 | 2.751 | -3.279 |
-| 21 | 6.045 | 31.684 | 2.445 | 11.694 | 10.254 | 6.000 | 302 | 576 | 61 | 0 | 3.315 | 35 |
-| 22 | 6.109 | 32.724 | 2.573 | 12.307 | 10.792 | 6.000 | 308 | 588 | 61 | 0 | 3.835 | 3.870 |
-| 23 | 6.166 | 33.655 | 2.691 | 12.870 | 11.285 | 6.000 | 313 | 598 | 61 | 0 | 4.313 | 8.183 |
-| 24 | 6.218 | 34.488 | 2.799 | 13.384 | 11.736 | 6.000 | 318 | 607 | 61 | 3.233 | 1.517 | 9.700 |
+| 21 | 6.045 | 31.684 | 2.445 | 11.694 | 10.254 | 6.000 | 302 | 576 | 61 | 9 | 3.306 | 26 |
+| 22 | 6.109 | 32.724 | 2.573 | 12.307 | 10.792 | 6.000 | 308 | 588 | 61 | 959 | 2.876 | 2.903 |
+| 23 | 6.166 | 33.655 | 2.691 | 12.870 | 11.285 | 6.000 | 313 | 598 | 61 | 1.078 | 3.235 | 6.138 |
+| 24 | 6.218 | 34.488 | 2.799 | 13.384 | 11.736 | 6.000 | 318 | 607 | 61 | 1.188 | 3.563 | 9.700 |
 
 ## 7. Cuántos clientes hacen falta
 
@@ -392,6 +392,8 @@ Acumulado a 24 meses del escenario Base tal cual: **USD -25.992**.
 | Doble presupuesto de pauta | USD -53.421 | -27.428 |
 | Cero pauta (sólo orgánico) | USD 1.353 | +27.345 |
 | Todos los pagos por la web (sin comisión de tienda) | USD -24.839 | +1.154 |
+| Precio × 2 (con su efecto en conversión y churn) | USD -25.761 | +231 |
+| Precio × 4 | USD -25.718 | +274 |
 
 ### La lectura
 
@@ -410,7 +412,133 @@ literalmente, el diferencial del producto.
 Y mover los pagos de la tienda a la web es, en plata, equivalente a una
 mejora de conversión: son 10 puntos de comisión sobre cada peso cobrado.
 
-## 9. El costo que el modelo no cobra: tu tiempo
+## 9. ¿Alcanza con subir el precio para estar en verde desde el mes 6?
+
+La pregunta es buena y el modelo la puede contestar en vez de opinar.
+«Rentable desde el mes 6» se toma en serio: verde ese mes **y todos los
+que siguen**, no un mes bueno suelto.
+
+### Cómo se modela una suba de precio sin hacer trampa
+
+Subir el precio no es gratis y el modelo tiene que decirlo. Cobrar más
+espanta gente antes de que pague (elasticidad de conversión) y hace que el
+que ya paga aguante menos (elasticidad de churn). Un modelo que sube el
+precio dejando la conversión quieta siempre «demuestra» que hay que cobrar
+más, y es mentira. Acá se asume elasticidad **0,8**:
+al doble de precio, la conversión cae a poco más de la mitad. Menos de 1
+porque Matcher se compara contra una competencia mucho más cara, así que
+aguanta algo de suba antes de que la gente se vaya.
+
+### La respuesta corta: no, y el precio no es el problema
+
+| Escenario | Precio mínimo para estar en verde desde el mes 6 (con la pauta del plan) |
+|---|---|
+| Pesimista | **No se llega**, ni multiplicando el precio por 12 (Plus a USD 47,88) |
+| Base | **No se llega**, ni multiplicando el precio por 12 (Plus a USD 47,88) |
+| Optimista | **No se llega**, ni multiplicando el precio por 12 (Plus a USD 47,88) |
+
+Por qué. En el mes 6 del escenario Base el costo se reparte así:
+
+- Marketing: **USD 600** de un costo total de USD 738.
+- Todo lo demás (infra, moderación, fijos): USD 138.
+- Ingreso neto de ese mes: USD 247, de 60 suscriptores.
+
+El agujero del mes 6 **es la pauta**, no el precio. Y subir el precio casi
+no mueve el ingreso, porque lo que se gana por suscriptor se pierde en
+suscriptores:
+
+| Precio Plus | Conversión efectiva | Suscriptores en el mes 6 | Ingreso neto del mes 6 |
+|---:|---:|---:|---:|
+| USD 3,99 | 1,5 % | 60 | USD 247 |
+| USD 5,99 | 1,1 % | 41 | USD 256 |
+| USD 7,98 | 0,9 % | 32 | USD 261 |
+| USD 15,96 | 0,5 % | 16 | USD 273 |
+| USD 31,92 | 0,3 % | 8 | USD 280 |
+| USD 47,88 | 0,2 % | 6 | USD 283 |
+
+De USD 3,99 a USD 47,88 el ingreso del mes 6 se mueve una miseria. **No
+hay precio que arregle un mes en el que se gastan USD 600 en publicidad
+para conseguir 60 suscriptores.**
+
+### La respuesta larga: el mes 6 en verde ya es alcanzable, y sin tocar el precio
+
+La palanca que sí funciona es la otra: gastar menos en pauta.
+
+| Escenario | Recorte de pauta para estar en verde desde el mes 6 | Sin pauta: primer mes en verde |
+|---|---|---:|
+| Pesimista | no alcanza ni recortando todo | nunca |
+| Base | recortar **99,0 %** | mes 5 |
+| Optimista | recortar **71,0 %** | mes 2 |
+
+**El escenario Base, sin gastar un peso en publicidad, queda en verde
+desde el mes 5 y no vuelve a rojo — con el precio de hoy, USD
+3,99.** Lo que pedís ya se puede, y no
+hace falta cobrar más para conseguirlo: hace falta no comprar usuarios que
+cuestan más de lo que dejan.
+
+### Y si igual querés subir el precio, cuál es el óptimo
+
+Sobre el escenario Base sin pauta, barriendo el precio y quedándose con el
+mejor acumulado a 24 meses:
+
+| Precio Plus | Precio Gold | Suscriptores mes 24 | Acumulado 24 meses |
+|---:|---:|---:|---:|
+| USD 3,99 | USD 7,99 | 68 | USD 1.353 |
+| USD 5,99 | USD 11,98 | 45 | USD 1.387 |
+| USD 7,98 | USD 15,98 | 34 | USD 1.397 |
+| USD 9,98 | USD 19,98 | 27 | USD 1.398 |
+| USD 11,97 | USD 23,97 | 22 | USD 1.395 |
+| USD 15,96 | USD 31,96 | 17 | USD 1.386 |
+| USD 23,94 | USD 47,94 | 11 | USD 1.364 |
+
+El óptimo cae en **× 2,35** —Plus a USD
+9,38, Gold a USD 18,78— y
+deja USD 1.398 contra USD 1.353 sin
+tocar nada: **USD 45 de diferencia
+en dos años.** Nada. La curva es tan chata que el precio, en este rango, es
+casi indiferente para el resultado — y en cambio sí decide con qué
+argumento salís a competir.
+
+### Dónde se da vuelta esta conclusión
+
+Todo esto depende de un número que **no está medido**: la elasticidad. Si
+la gente fuera menos sensible al precio de lo que supone el modelo —cosa
+posible, porque la competencia sale 4 veces más— subir convendría, y mucho:
+
+| Elasticidad supuesta | Precio Plus óptimo | Acumulado 24 meses | Contra USD 1.353 sin tocar |
+|---:|---:|---:|---:|
+| 0,3 | USD 47,88 *(tope del barrido)* | USD 10.545 | +9.192 |
+| 0,5 | USD 47,88 *(tope del barrido)* | USD 5.476 | +4.123 |
+| 0,8 | USD 9,38 | USD 1.398 | +45 |
+| 1,0 | USD 3,99 | USD 1.353 | +0 |
+| 1,3 | USD 3,99 | USD 1.353 | +0 |
+
+Las filas marcadas *(tope del barrido)* no son un óptimo sino el borde de
+la búsqueda: con esa elasticidad al modelo le conviene seguir subiendo más
+allá de donde tiene sentido mirar. Léelas como «convendría subir bastante»,
+no como «cobrá USD 48».
+
+O sea: **la respuesta a «¿subo el precio?» depende de un dato que hoy no
+tenés, y que se puede medir.** Un test A/B de precio con usuarios reales
+—mismo producto, dos precios, mirar conversión a 60 días— vale más que
+cualquier cosa que diga esta tabla. Ese test cuesta cero: son dos precios
+en la pantalla de planes.
+
+### Lo que sí conviene hacer con el precio, cueste lo que cueste medirlo
+
+1. **Empujar el plan anual.** Ya está: cobra por adelantado, elimina el
+   churn mensual y esquiva la comisión si se paga por la web. Es la suba de
+   ingreso por suscriptor más barata que hay, porque no toca el precio de
+   lista.
+2. **Mover pagos de la tienda a la web.** Son 10 puntos de comisión, que a
+   estos volúmenes valen más que cualquier ajuste de precio.
+3. **Si subís, subí poco y de una vez.** Hasta USD 5,99–7,99 el Plus seguís
+   abajo de la mitad del más barato de la competencia (USD 15,99 de
+   referencia, sin verificar), así que el argumento comercial se sostiene.
+   Arriba de eso dejás de ser «lo mismo por una fracción» y pasás a competir
+   de igual a igual con marcas que tienen mil veces tu presupuesto.
+
+## 10. El costo que el modelo no cobra: tu tiempo
 
 Ninguno de los números de arriba descuenta el trabajo propio. Si se
 valorizara a USD 15 la hora:
@@ -421,7 +549,7 @@ valorizara a USD 15 la hora:
 | Base | 80 | USD 28.800 | USD -54.792 |
 | Optimista | 120 | USD 43.200 | USD -33.500 |
 
-## 10. Conclusión honesta
+## 11. Conclusión honesta
 
 1. **Con pauta paga, a este precio, el modelo no cierra.** Un suscriptor
    de Matcher deja entre USD 8,86 y USD 19,06 en toda su
@@ -431,17 +559,22 @@ valorizara a USD 15 la hora:
    conviene mirar de frente: **elimina la publicidad paga como motor de
    crecimiento**. Con USD 4 de suscripción no se compra un usuario a USD 2
    y se gana plata; con los USD 16 que cobra Tinder, sí.
-2. **El único camino que cierra es la densidad orgánica.** Una zona chica,
+2. **Subir el precio no arregla eso** (sección 9). Con la pauta puesta no
+   hay precio —ni multiplicando por 12— que ponga el mes 6 en verde,
+   porque el agujero de ese mes es la publicidad. Y sin pauta, el mes 6
+   ya está en verde con el precio de hoy. El precio decide con qué
+   argumento salís a competir; el resultado lo decide otra cosa.
+3. **El único camino que cierra es la densidad orgánica.** Una zona chica,
    presencia real, boca a boca. Es más lento y menos glamoroso que
    apretar 'aumentar presupuesto', y en este modelo es la diferencia entre
    terminar en USD 1.353 o en USD -25.992.
-3. **Antes de gastar un peso en pauta hay tres cosas sin resolver** y
+4. **Antes de gastar un peso en pauta hay tres cosas sin resolver** y
    están todas en `docs/PUBLICAR.md`: el backend efímero (las cuentas y
    las fotos se pierden en cada arranque en frío), la moderación
    inexistente y las fotos guardadas dentro de la base. Publicitar una app
    con esos tres problemas quema el dinero y la reputación a la vez: el
    usuario que se va por una mala primera impresión no vuelve.
-4. **El orden correcto es**: backend con disco → moderación → 200 usuarios
+5. **El orden correcto es**: backend con disco → moderación → 200 usuarios
    reales en un radio de pocos kilómetros → medir conversión y churn de
    verdad → recién ahí volver a este archivo, reemplazar los supuestos por
    lo medido y correrlo de nuevo. Ese, y no el número de hoy, es el

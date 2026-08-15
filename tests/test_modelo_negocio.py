@@ -140,14 +140,84 @@ def test_gastar_mas_en_pauta_no_arregla_un_ltv_cac_malo(base):
 
 def test_el_irae_solo_se_cobra_sobre_ganancia_y_compensa_perdidas(base):
     corrida = mn.correr(base)
-    meses_con_impuesto = [m.numero for m in corrida.meses if m.impuesto > 0]
     # El escenario base pierde plata los 24 meses: no puede pagar IRAE.
     assert corrida.acumulado(24) < 0
-    assert meses_con_impuesto == []
-    # Y el impuesto sólo puede aparecer al cierre del ejercicio.
+    assert [m.numero for m in corrida.meses if m.impuesto > 0] == []
+    # Y nunca puede haber impuesto mientras el acumulado siga en pérdida.
     for e in mn.ESCENARIOS:
-        for m in mn.correr(e).meses:
-            assert m.impuesto == 0 or m.numero in (12, 24)
+        c = mn.correr(e)
+        for m in c.meses:
+            if m.impuesto > 0:
+                assert c.acumulado(m.numero) > 0
+
+
+def test_el_irae_se_provisiona_mes_a_mes_y_no_de_golpe():
+    """El bug que tuvo esto: cargar el impuesto de todo el ejercicio en el mes
+    12 y en el 24 pintaba de rojo un mes que operativamente estaba en verde, y
+    con eso 'desde qué mes es rentable' daba 'nunca' en un escenario que ganaba
+    plata todos los meses."""
+    optimista = next(e for e in mn.ESCENARIOS if e.codigo == "optimista")
+    corrida = mn.correr(optimista)
+    meses_con_impuesto = [m.numero for m in corrida.meses if m.impuesto > 0]
+    assert len(meses_con_impuesto) > 2
+    assert meses_con_impuesto != [12, 24]
+    # Y el total recaudado sigue siendo el 25 % de la ganancia fiscal final.
+    ganancia = sum(m.resultado for m in corrida.meses)
+    assert sum(m.impuesto for m in corrida.meses) == pytest.approx(ganancia * mn.IRAE)
+
+
+def test_subir_el_precio_baja_la_conversion_y_sube_el_churn(base):
+    """Un modelo que sube el precio dejando la conversión quieta siempre
+    'demuestra' que hay que cobrar más. Este test impide esa trampa."""
+    caro = replace(base, multiplicador_precio=2.0)
+    assert caro.arpu_bruto() == pytest.approx(base.arpu_bruto() * 2)
+    assert caro.conversion_efectiva < base.conversion_efectiva
+    assert caro.churn_suscriptor_efectivo > base.churn_suscriptor_efectivo
+
+
+def test_con_elasticidad_uno_subir_el_precio_no_cambia_nada(base):
+    """Definición de elasticidad unitaria: al doble de precio, la mitad de
+    conversión. Si el modelo está bien armado, la facturación no se mueve."""
+    unitaria = replace(base, elasticidad_conversion=1.0, elasticidad_churn=0.0)
+    caro = replace(unitaria, multiplicador_precio=3.0)
+    assert caro.arpu_bruto() * caro.conversion_efectiva == pytest.approx(
+        unitaria.arpu_bruto() * unitaria.conversion_efectiva
+    )
+
+
+def test_el_multiplicador_uno_es_exactamente_el_precio_de_hoy(base):
+    assert base.multiplicador_precio == 1.0
+    assert base.precio("plus") == planes.PLANES["plus"].precio_mes
+    assert base.conversion_efectiva == pytest.approx(base.conversion_mensual)
+    assert base.churn_suscriptor_efectivo == pytest.approx(base.churn_suscriptor)
+
+
+def test_rentable_desde_exige_que_se_quede_en_verde(base):
+    """'Rentable desde el mes 6' no puede significar un mes bueno suelto."""
+    corrida = mn.correr(base)
+    assert not mn.rentable_desde(corrida, 6)
+    sin_pauta = mn.correr(replace(base, presupuesto=[0.0] * mn.MESES))
+    primero = next(
+        m.numero for m in sin_pauta.meses if mn.rentable_desde(sin_pauta, m.numero)
+    )
+    assert all(m.resultado_neto >= 0 for m in sin_pauta.meses[primero - 1 :])
+    assert sin_pauta.mes(primero - 1).resultado_neto < 0
+
+
+def test_subir_el_precio_no_alcanza_para_el_mes_6_con_la_pauta_puesta(base):
+    """La respuesta a la pregunta del dueño, fijada como test: el agujero del
+    mes 6 es la pauta, no el precio. Si alguien cambia los supuestos y esto
+    deja de valer, que se entere acá."""
+    assert mn.multiplicador_para_rentable_desde(base, 6) is None
+    mes6 = mn.correr(base).mes(6)
+    assert mes6.marketing > mes6.costo_total - mes6.marketing
+
+
+def test_recortar_la_pauta_si_alcanza_para_el_mes_6(base):
+    fraccion = mn.recorte_pauta_para_rentable_desde(base, 6)
+    assert fraccion is not None
+    alt = replace(base, presupuesto=[x * fraccion for x in base.presupuesto])
+    assert mn.rentable_desde(mn.correr(alt), 6)
 
 
 def test_el_hosting_sube_por_escalones():
