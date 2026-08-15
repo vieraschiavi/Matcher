@@ -247,10 +247,38 @@ cualquiera se firme una sesión ajena.
 Para verificar que quedó puesta, `GET /api/salud` devuelve
 `"sesiones_compartidas": true`.
 
-Ojo con lo que **no** arregla: los datos que se escriben (likes, matches,
-fotos subidas) siguen viviendo en el disco efímero y se pierden en cada
-arranque en frío. La demo se resiembra igual porque la semilla es fija. Para
-usuarios de verdad hay que apuntar `MATCHER_BD` a una base con disco.
+Ojo con lo que **no** arregla: la sesión sobrevive, los DATOS no. Ver abajo.
+
+### Vercel no sirve para usuarios reales (medido)
+
+En serverless la base vive en `/tmp`, que es efímero **y distinto en cada
+instancia**. Con una cuenta recién creada y su foto subida:
+
+```
+40 pedidos en paralelo → 25 × 401 "sesión inválida", 15 × 200
+```
+
+La firma del token era válida; lo que faltaba era el **perfil**. Cada instancia
+resiembra la demo desde cero, y una cuenta real no está en la semilla. Por eso
+las cuentas demo funcionan (salen del seed determinista) y una cuenta propia
+se cae, y por eso las fotos subidas "desaparecen".
+
+Esto **no se arregla del lado de la sesión**: necesita disco compartido. El
+backend lo detecta (`almacenamiento_efimero()`), lo reporta en `/api/salud` y
+la pantalla de alta avisa antes de dejar crear una cuenta que se va a perder.
+
+Para usuarios de verdad hay un `Dockerfile` con `fly.toml` y `render.yaml`
+listos: el motor es el mismo, sólo cambia dónde apunta `MATCHER_BD`. En Fly:
+
+```
+fly launch --no-deploy --copy-config --name matcher
+fly volumes create datos --size 1 --region gru
+fly secrets set MATCHER_SECRETO=$(python3 -c "import secrets;print(secrets.token_urlsafe(48))")
+fly deploy
+```
+
+Lo que no puede faltar en ningún host es el **volumen montado**: sin eso se
+repite el problema de Vercel con otro nombre.
 
 ---
 

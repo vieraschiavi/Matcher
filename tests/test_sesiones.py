@@ -206,3 +206,45 @@ def test_el_alta_pendiente_vale_en_otra_instancia(hacer_perfil):
     assert b.leer_alta_pendiente("token.inventado") is None
     a.cerrar()
     b.cerrar()
+
+
+# ---------------------------------------------------------------------------
+# Almacenamiento efímero: la app tiene que saber que lo es
+# ---------------------------------------------------------------------------
+# Medido contra el despliegue serverless: con una cuenta recién creada, de 40
+# pedidos en paralelo 25 volvieron 401. La firma era válida — lo que faltaba
+# era el PERFIL, porque cada instancia resiembra su propia base y una cuenta
+# real no está en la semilla. Las fotos subidas "desaparecen" por lo mismo.
+#
+# No hay arreglo del lado de la sesión: necesita disco compartido. Lo que sí
+# se puede es no mentirle al usuario, y para eso el servidor tiene que saber
+# en qué está parado.
+def test_una_base_en_tmp_se_declara_efimera(monkeypatch):
+    from webapp.backend import api as backend
+
+    monkeypatch.delenv("MATCHER_EFIMERO", raising=False)
+    monkeypatch.setattr(backend, "RUTA_BD", "/tmp/matcher.db")
+    assert backend.almacenamiento_efimero() is True
+
+
+def test_una_base_con_disco_no_es_efimera(monkeypatch):
+    from webapp.backend import api as backend
+
+    monkeypatch.delenv("MATCHER_EFIMERO", raising=False)
+    monkeypatch.setattr(backend, "RUTA_BD", "/datos/matcher.db")
+    assert backend.almacenamiento_efimero() is False
+
+
+def test_se_puede_forzar_con_la_variable(monkeypatch):
+    """Por si /tmp está montado sobre un disco de verdad."""
+    from webapp.backend import api as backend
+
+    monkeypatch.setattr(backend, "RUTA_BD", "/tmp/matcher.db")
+    monkeypatch.setenv("MATCHER_EFIMERO", "0")
+    assert backend.almacenamiento_efimero() is False
+
+
+def test_salud_reporta_el_almacenamiento(cliente):
+    r = cliente.get("/api/salud").json()
+    assert "almacenamiento_efimero" in r
+    assert isinstance(r["almacenamiento_efimero"], bool)

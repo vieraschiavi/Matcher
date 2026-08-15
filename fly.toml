@@ -1,0 +1,47 @@
+# Matcher en Fly.io, con volumen persistente.
+#
+# El paso que importa es el volumen: sin él estaríamos en el mismo problema que
+# en Vercel (base efímera, cuentas y fotos que desaparecen).
+#
+#   fly launch --no-deploy --copy-config --name matcher
+#   fly volumes create datos --size 1 --region gru
+#   fly secrets set MATCHER_SECRETO=$(python3 -c "import secrets;print(secrets.token_urlsafe(48))")
+#   fly deploy
+#
+# `gru` es São Paulo, que es la región más cercana a Uruguay. Cambiala si el
+# público está en otro lado: la latencia del chat se nota.
+
+app = "matcher"
+primary_region = "gru"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  MATCHER_BD = "/datos/matcher.db"
+  MATCHER_EFIMERO = "0"
+  MATCHER_PUERTO = "8080"
+  # La demo se siembra sola la primera vez. Con datos reales encima conviene
+  # apagarla (MATCHER_DEMO=0) para no mezclar perfiles sintéticos con gente.
+  MATCHER_DEMO = "1"
+
+[[mounts]]
+  source = "datos"
+  destination = "/datos"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  # En cero, la primera visita después de un rato espera el arranque. Con una
+  # sola máquina prendida eso no pasa; el volumen no se pierde igual.
+  min_machines_running = 1
+
+  [http_service.http_options.response.headers]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

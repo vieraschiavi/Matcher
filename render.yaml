@@ -1,0 +1,35 @@
+# Matcher en Render, con disco persistente.
+#
+# Alternativa a Fly: se conecta el repo desde el panel y Render lee este
+# archivo. Lo que no puede faltar es el `disk` — sin él la base se borra en
+# cada despliegue y volvemos al problema de Vercel.
+#
+# MATCHER_SECRETO va con `generateValue: true`: lo genera Render y queda
+# guardado. Un secreto de firma nunca se escribe en un archivo del repo.
+
+services:
+  - type: web
+    name: matcher
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: oregon
+    plan: starter          # el plan gratis de Render NO permite discos
+    healthCheckPath: /api/salud
+    envVars:
+      - key: MATCHER_BD
+        value: /datos/matcher.db
+      - key: MATCHER_EFIMERO
+        value: "0"
+      - key: MATCHER_PUERTO
+        value: "8080"
+      - key: MATCHER_DEMO
+        value: "1"
+      - key: MATCHER_SECRETO
+        generateValue: true
+      # Para el login con Google/Facebook, cargalos a mano en el panel:
+      # GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+      # FACEBOOK_APP_ID, FACEBOOK_APP_SECRET, MATCHER_URL_PUBLICA
+    disk:
+      name: datos
+      mountPath: /datos
+      sizeGB: 1

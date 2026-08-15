@@ -87,6 +87,24 @@ app.add_middleware(
 _almacen: Almacen | None = None
 
 
+def almacenamiento_efimero() -> bool:
+    """¿La base vive en un disco que se borra?
+
+    En serverless (Vercel) el único directorio escribible es `/tmp`, y además
+    cada instancia tiene el suyo: una cuenta creada en una instancia no existe
+    en la de al lado, y desaparece del todo en el próximo arranque en frío.
+    Medido: de 40 pedidos en paralelo con una cuenta recién creada, 25 dieron
+    401 porque el perfil no estaba en esa instancia.
+
+    Se puede forzar con MATCHER_EFIMERO=0 si la base de /tmp está sobre un
+    disco montado de verdad.
+    """
+    forzado = os.getenv("MATCHER_EFIMERO", "").strip()
+    if forzado:
+        return forzado == "1"
+    return RUTA_BD.startswith("/tmp/")
+
+
 def almacen() -> Almacen:
     global _almacen
     if _almacen is None:
@@ -265,6 +283,11 @@ def salud():
         # solas: cada instancia firma con una clave distinta. Es un booleano,
         # nunca el secreto — /api/salud es público.
         "sesiones_compartidas": seguridad.secreto_compartido(),
+        # Si el almacenamiento es efímero, la interfaz avisa antes de dejar
+        # crear una cuenta. Una cuenta que se pierde en el próximo arranque en
+        # frío no es un detalle técnico: es alguien que sube diez fotos y las
+        # pierde, y hay que decírselo ANTES, no después.
+        "almacenamiento_efimero": almacenamiento_efimero(),
     }
 
 

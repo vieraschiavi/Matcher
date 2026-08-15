@@ -32,6 +32,7 @@ export default function Entrar() {
   const [error, setError] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [proveedores, setProveedores] = useState([]);
+  const [efimero, setEfimero] = useState(false);
   const [f, setF] = useState({
     email: "",
     clave: "",
@@ -65,6 +66,10 @@ export default function Entrar() {
 
   useEffect(() => {
     api.proveedoresLogin().then((r) => setProveedores(r.proveedores)).catch(() => {});
+    // Si el backend corre sobre almacenamiento efímero hay que decirlo ANTES
+    // de que alguien cree una cuenta y suba diez fotos, no después de que las
+    // pierda. El servidor lo reporta; la interfaz no lo adivina.
+    api.salud().then((r) => setEfimero(!!r.almacenamiento_efimero)).catch(() => {});
   }, []);
 
   // Vuelta del proveedor: llega `?token=…` (o `?error=…`) en el hash. El token
@@ -165,6 +170,12 @@ export default function Entrar() {
               ))}
               <div className="separador">{t("o con tu email")}</div>
             </>
+          )}
+
+          {efimero && pestana === "crear" && (
+            <div className="aviso aviso-oro" style={{ marginBottom: 12 }}>
+              {t("Este servidor de demostración borra los datos cada vez que se reinicia: la cuenta y las fotos que subas se van a perder. Para probar sin sorpresas, usá una de las cuentas de demo de abajo.")}
+            </div>
           )}
 
           <div className="pestanas">
