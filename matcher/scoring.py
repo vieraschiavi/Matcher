@@ -282,6 +282,12 @@ def top_votados(perfiles: list[Perfil], limite: int = 20) -> list[dict]:
         {
             "id": p.id,
             "nombre": p.nombre,
+            # Género y edad viajan para que el cliente pueda re-verificar el
+            # filtro. El servidor ya filtra; esto es cinturón y tiradores para
+            # el despliegue serverless, donde una preferencia recién guardada
+            # puede no estar todavía en la instancia que arma el ranking.
+            "genero": p.genero,
+            "edad": p.edad,
             "popularidad": popularidad(p),
             "likes_recibidos": p.likes_recibidos,
             "superfans_recibidos": p.superfans_recibidos,

@@ -3,6 +3,7 @@ import { t } from "../i18n";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
 import { useApp } from "../estado";
+import { soloPermitidos } from "../filtroCliente";
 import {
   IcoCorazon,
   IcoCruz,
@@ -130,8 +131,13 @@ function Carta({ tarjeta, fondo, arrastre, onFoto }) {
 }
 
 export default function Descubrir() {
-  const { cupos, setCupos } = useApp();
+  const { cupos, setCupos, perfil } = useApp();
   const navegar = useNavigate();
+  // En un ref y no en las deps de `cargar`: cada `refrescar()` cambia la
+  // identidad del objeto perfil y metería una recarga del deck que resetea
+  // la pila de tarjetas a mitad del swipeo.
+  const perfilRef = useRef(perfil);
+  perfilRef.current = perfil;
   const [tarjetas, setTarjetas] = useState([]);
   const [diagnostico, setDiagnostico] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -144,7 +150,15 @@ export default function Descubrir() {
     setCargando(true);
     try {
       const r = await api.deck(20);
-      setTarjetas(r.tarjetas);
+      // Última línea de defensa del filtro duro: en serverless el deck puede
+      // venir de una instancia que aún no vio tus preferencias nuevas.
+      const limpias = soloPermitidos(perfilRef.current?.preferencias, r.tarjetas);
+      setTarjetas(limpias);
+      // Precargar las fotos de las próximas tarjetas: el swipe se siente
+      // instantáneo en vez de mostrar un gris mientras baja la imagen.
+      limpias.slice(0, 4).forEach((tar) =>
+        tar.fotos?.slice(0, 1).forEach((f) => { new Image().src = f.url; })
+      );
       setDiagnostico(r.diagnostico || null);
       setCupos(r.cupos);
     } finally {
@@ -164,10 +178,17 @@ export default function Descubrir() {
     // backend devuelve "ya interactuaste".
     setTarjetas((t) => t.slice(1));
     setArrastre({ x: 0, y: 0, soltando: false });
+    // Respuesta táctil: un tic corto en el like, uno doble en el superfan y
+    // un patrón en el match. Es la mitad de por qué las apps grandes se
+    // sienten "vivas"; sin permiso extra en Android.
+    try { navigator.vibrate?.(tipo === "superfan" ? [20, 40, 20] : 15); } catch { /* sin vibrador */ }
     try {
       const r = await api.interactuar(actual.id, tipo);
       setCupos(r.cupos);
-      if (r.match) setMatch({ ...r, con: r.con });
+      if (r.match) {
+        try { navigator.vibrate?.([30, 60, 30, 60, 80]); } catch { /* sin vibrador */ }
+        setMatch({ ...r, con: r.con });
+      }
     } catch (e) {
       if (e instanceof ErrorApi && e.sinCupo) {
         setMuro(e.cuerpo);

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import Logo from "./Logo";
-import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
 import { useApp } from "./estado";
+import { soloPermitidos } from "./filtroCliente";
 import { t } from "./i18n";
 import {
   IcoChat,
@@ -131,10 +132,37 @@ function BarraSuperior() {
 // Vista de "te gustaron". Vive acá porque es media pantalla y comparte todo
 // con el deck; separarla en su archivo era un import y nada más.
 function Likes() {
+  const { perfil } = useApp();
+  const navegar = useNavigate();
   const [datos, setDatos] = useState(null);
+  const [error, setError] = useState("");
+
+  const cargar = () =>
+    api
+      .likesRecibidos()
+      // Cinturón y tiradores del filtro duro (ver filtroCliente.js).
+      .then((r) => setDatos({ ...r, perfiles: soloPermitidos(perfil?.preferencias, r.perfiles) }))
+      .catch(() => setDatos({ visible: false, cantidad: 0, perfiles: [] }));
   useEffect(() => {
-    api.likesRecibidos().then(setDatos).catch(() => setDatos({ visible: false, cantidad: 0 }));
+    cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Responder el like ACÁ es el punto de la pantalla: te gustó → like de
+  // vuelta → match instantáneo (la otra persona ya había dicho que sí) → al
+  // chat. Antes la lista era sólo mirar, y "no deja chatear" era literal.
+  const responder = async (id, tipo) => {
+    setError("");
+    try {
+      const r = await api.interactuar(id, tipo);
+      try { navigator.vibrate?.(r.match ? [30, 60, 30, 60, 80] : 15); } catch { /* sin vibrador */ }
+      if (r.match) navegar(`/matches/${r.match_id}`);
+      else cargar();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   if (!datos) return <p className="page-sub">{t("Cargando…")}</p>;
 
   return (
@@ -154,6 +182,7 @@ function Likes() {
           .
         </div>
       )}
+      {error && <div className="aviso aviso-error" style={{ marginBottom: 14 }}>{error}</div>}
       <div className="grid grid-3">
         {datos.perfiles?.map((p) => (
           <div key={p.id} className="panel" style={{ padding: 0, overflow: "hidden" }}>
@@ -170,6 +199,14 @@ function Likes() {
                 <span className="insignia insignia-comp">{p.compatibilidad}%</span>
                 {p.tipo === "superfan" && <span className="insignia insignia-oro">⭐ Superfan</span>}
                 {p.sintetico && <span className="insignia insignia-sint">Sintético</span>}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button className="btn btn-primario" style={{ flex: 1 }} onClick={() => responder(p.id, "like")}>
+                  ♥ {t("Responder like")}
+                </button>
+                <button className="btn" onClick={() => responder(p.id, "pass")} aria-label="Pasar">
+                  ✕
+                </button>
               </div>
             </div>
           </div>

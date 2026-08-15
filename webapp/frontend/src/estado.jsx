@@ -99,6 +99,14 @@ export function Proveedor({ children }) {
     await refrescar();
   };
 
+  // Actualiza el perfil desde una respuesta que ya lo trae. Los endpoints de
+  // fotos devuelven el perfil entero justamente para esto: pedirlo de nuevo
+  // con GET /api/yo puede caer en otra instancia con estado viejo, y era la
+  // causa de "borré una foto y desapareció otra".
+  const aplicarPerfil = (p) => {
+    if (p) setPerfil(p);
+  };
+
   const salir = async () => {
     try {
       await api.logout();
@@ -113,7 +121,7 @@ export function Proveedor({ children }) {
     <Ctx.Provider
       value={{
         perfil, cupos, catalogos, cargando, sesionCaida, lang, cambiarIdioma,
-        entrar, entrarConToken, registrar, salir, refrescar, setCupos,
+        entrar, entrarConToken, registrar, salir, refrescar, setCupos, aplicarPerfil,
       }}
     >
       {children}

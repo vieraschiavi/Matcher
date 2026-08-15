@@ -2,15 +2,22 @@ import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
+import { useApp } from "../estado";
+import { soloPermitidos } from "../filtroCliente";
 
 export default function Cruces() {
   const navegar = useNavigate();
+  const { perfil } = useApp();
   const [datos, setDatos] = useState(null);
 
   useEffect(() => {
     // Sin el catch, un pedido fallido dejaba `datos` en null y la pantalla
     // colgada en "Cargando…" para siempre.
-    api.cruces().then(setDatos).catch(() => setDatos({ resumen: {}, personas: [] }));
+    // Cinturón y tiradores del filtro duro (ver filtroCliente.js).
+    api.cruces()
+      .then((r) => setDatos({ ...r, personas: soloPermitidos(perfil?.preferencias, r.personas) }))
+      .catch(() => setDatos({ resumen: {}, personas: [] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const like = async (id) => {

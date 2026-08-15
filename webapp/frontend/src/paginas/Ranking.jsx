@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { api } from "../api";
+import { useApp } from "../estado";
+import { soloPermitidos } from "../filtroCliente";
 
 export default function Ranking() {
+  const { perfil } = useApp();
   const [top, setTop] = useState([]);
   const [sugerencias, setSugerencias] = useState(null);
 
   useEffect(() => {
-    api.ranking(25).then((r) => setTop(r.top));
+    // Cinturón y tiradores del filtro duro (ver filtroCliente.js).
+    api.ranking(25).then((r) => setTop(soloPermitidos(perfil?.preferencias, r.top)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     api.sugerenciasAuto().then(setSugerencias).catch(() => setSugerencias(null));
   }, []);
 

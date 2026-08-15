@@ -54,7 +54,10 @@ CREATE TABLE IF NOT EXISTS matches (
     b_id           TEXT NOT NULL,
     momento        TEXT NOT NULL,
     automatico     INTEGER NOT NULL DEFAULT 0,
-    compatibilidad REAL NOT NULL DEFAULT 0
+    compatibilidad REAL NOT NULL DEFAULT 0,
+    -- Cita a ciegas: el chat existe pero las fotos no viajan hasta que los
+    -- dos escribieron lo suficiente (ver `aciegas.py`).
+    ciego          INTEGER NOT NULL DEFAULT 0
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_match_par ON matches(a_id, b_id);
 CREATE TABLE IF NOT EXISTS mensajes (
@@ -199,6 +202,13 @@ class Almacen:
         self._compartida = self._nueva_conexion() if self.en_memoria else None
         con = self.con
         con.executescript(ESQUEMA)
+        # Migración mínima: CREATE IF NOT EXISTS no agrega columnas a una base
+        # que ya existía. El ALTER falla con "duplicate column" cuando la
+        # columna ya está, y eso es exactamente el caso feliz.
+        try:
+            con.execute("ALTER TABLE matches ADD COLUMN ciego INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
         con.commit()
 
     def _nueva_conexion(self) -> sqlite3.Connection:
@@ -765,6 +775,7 @@ class Almacen:
         automatico: bool,
         compatibilidad: float,
         ahora: datetime | None = None,
+        ciego: bool = False,
     ) -> Match:
         # Par ordenado: sin esto el mismo match entra dos veces (A,B) y (B,A).
         a, b = sorted([a, b])
@@ -789,9 +800,10 @@ class Almacen:
             compatibilidad=compatibilidad,
         )
         self.con.execute(
-            "INSERT INTO matches (id, a_id, b_id, momento, automatico, compatibilidad) "
-            "VALUES (?,?,?,?,?,?)",
-            (m.id, m.a_id, m.b_id, m.momento.isoformat(), int(m.automatico), m.compatibilidad),
+            "INSERT INTO matches (id, a_id, b_id, momento, automatico, compatibilidad, ciego) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (m.id, m.a_id, m.b_id, m.momento.isoformat(), int(m.automatico), m.compatibilidad,
+             int(ciego)),
         )
         self.con.commit()
         return m
@@ -816,13 +828,30 @@ class Almacen:
                 "SELECT COUNT(*) c FROM mensajes WHERE match_id = ? AND de_id != ? AND leido = 0",
                 (f["id"], id_),
             ).fetchone()["c"]
+            # Cita a ciegas: hasta que los dos escribieron lo suficiente, las
+            # fotos NO viajan. Regla 8 del producto: lo que decide el servidor
+            # no lo esconde el cliente — mandar las fotos con un blur encima
+            # sería la fuga clásica, así que acá directamente no salen del
+            # servidor. El conteo es derivado de los mensajes: no hay un
+            # estado "revelado" que pueda quedar desincronizado.
+            es_ciego = bool(f["ciego"]) if "ciego" in f.keys() else False
+            ciego = None
+            datos_otro = otro.a_dict()
+            if es_ciego:
+                from . import aciegas
+
+                ciego = aciegas.estado(self, f["id"], id_)
+                if not ciego["revelado"]:
+                    datos_otro = aciegas.silueta(otro)
+
             salida.append(
                 {
                     "id": f["id"],
                     "momento": f["momento"],
                     "automatico": bool(f["automatico"]),
                     "compatibilidad": f["compatibilidad"],
-                    "con": otro.a_dict(),
+                    "con": datos_otro,
+                    "ciego": ciego,
                     "ultimo_mensaje": (
                         {"texto": ultimo["texto"], "momento": ultimo["momento"],
                          "mio": ultimo["de_id"] == id_}

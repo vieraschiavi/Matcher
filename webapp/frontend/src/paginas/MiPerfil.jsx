@@ -6,7 +6,7 @@ import { useApp } from "../estado";
 import { INTENCIONES, alternar } from "../vocabulario";
 
 export default function MiPerfil() {
-  const { perfil, catalogos, refrescar, lang, cambiarIdioma } = useApp();
+  const { perfil, catalogos, refrescar, aplicarPerfil, lang, cambiarIdioma } = useApp();
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [borrador, setBorrador] = useState(null);
@@ -53,14 +53,14 @@ export default function MiPerfil() {
     for (const archivo of [...ev.target.files]) {
       try {
         const { url, bytes } = await leerArchivo(archivo);
-        await api.subirFoto(url, bytes);
+        const r = await api.subirFoto(url, bytes);
+        aplicarPerfil(r.perfil);
       } catch (e) {
         setError(e.message);
         break;
       }
     }
     ev.target.value = "";
-    await refrescar();
   };
 
   const subirVideos = async (ev) => {
@@ -75,19 +75,29 @@ export default function MiPerfil() {
           break;
         }
         const { url, bytes } = await leerArchivo(archivo);
-        await api.subirVideo(url, segundos, bytes);
+        const r = await api.subirVideo(url, segundos, bytes);
+        aplicarPerfil(r.perfil);
       } catch (e) {
         setError(e.message);
         break;
       }
     }
     ev.target.value = "";
-    await refrescar();
   };
 
+  // El borrado usa el perfil que DEVUELVE el DELETE, no una relectura: la
+  // relectura podía caer en otra instancia con estado viejo y en pantalla
+  // "desaparecía" otra foto que la que se tocó. Y se confirma antes: en un
+  // teléfono el dedo pifia, y una foto borrada no se recupera.
   const quitar = async (id) => {
-    await api.borrarMedia(id);
-    await refrescar();
+    if (!window.confirm(t("¿Borrar esta foto o video? No se puede deshacer."))) return;
+    setError("");
+    try {
+      const r = await api.borrarMedia(id);
+      aplicarPerfil(r.perfil);
+    } catch (e) {
+      setError(e.message);
+    }
   };
 
   // Lo que devuelve la cámara ({url, bytes[, segundos]}) es exactamente lo
@@ -97,8 +107,8 @@ export default function MiPerfil() {
     setCamara(null);
     setError("");
     try {
-      await api.subirFoto(url, bytes);
-      await refrescar();
+      const r = await api.subirFoto(url, bytes);
+      aplicarPerfil(r.perfil);
     } catch (e) {
       setError(e.message);
     }
@@ -108,8 +118,8 @@ export default function MiPerfil() {
     setCamara(null);
     setError("");
     try {
-      await api.subirVideo(url, segundos, bytes);
-      await refrescar();
+      const r = await api.subirVideo(url, segundos, bytes);
+      aplicarPerfil(r.perfil);
     } catch (e) {
       setError(e.message);
     }
@@ -117,8 +127,8 @@ export default function MiPerfil() {
 
   const hacerPortada = async (id) => {
     const orden = [id, ...perfil.fotos.filter((f) => f.id !== id).map((f) => f.id)];
-    await api.ordenarMedios(orden);
-    await refrescar();
+    const r = await api.ordenarMedios(orden);
+    aplicarPerfil(r.perfil);
   };
 
   const libresFoto = catalogos.limites.fotos - perfil.fotos.length;

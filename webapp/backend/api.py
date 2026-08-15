@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from matcher import (
+    aciegas,
     automatch,
     cruces,
     demo,
@@ -541,11 +542,21 @@ def desactivar(perfil: Perfil = Depends(usuario)):
 # ---------------------------------------------------------------------------
 # Medios
 # ---------------------------------------------------------------------------
+# Los tres endpoints de medios devuelven el perfil ENTERO ya actualizado.
+# Antes devolvían un resumen y el cliente hacía un GET /api/yo aparte; en
+# serverless ese segundo pedido puede caer en otra instancia con otra base y
+# devolver el estado viejo — se borraba una foto y en pantalla desaparecía
+# otra. Con el perfil en la misma respuesta, lo que se ve es lo que hizo
+# exactamente la instancia que procesó el cambio.
 @app.post("/api/yo/fotos")
 def subir_foto(datos: AltaFoto, perfil: Perfil = Depends(usuario)):
     media = medios.agregar_foto(perfil, datos.url, bytes_=datos.bytes)
     almacen().guardar_perfil(perfil)
-    return {"media": media.a_dict(), "medios": medios.resumen(perfil)}
+    return {
+        "media": media.a_dict(),
+        "medios": medios.resumen(perfil),
+        "perfil": perfil.a_dict(privado=True),
+    }
 
 
 @app.post("/api/yo/videos")
@@ -554,7 +565,11 @@ def subir_video(datos: AltaVideo, perfil: Perfil = Depends(usuario)):
         perfil, datos.url, segundos=datos.segundos, bytes_=datos.bytes
     )
     almacen().guardar_perfil(perfil)
-    return {"media": media.a_dict(), "medios": medios.resumen(perfil)}
+    return {
+        "media": media.a_dict(),
+        "medios": medios.resumen(perfil),
+        "perfil": perfil.a_dict(privado=True),
+    }
 
 
 @app.delete("/api/yo/medios/{id_media}")
@@ -562,7 +577,7 @@ def borrar_media(id_media: str, perfil: Perfil = Depends(usuario)):
     if not medios.borrar(perfil, id_media):
         raise HTTPException(404, "no existe ese archivo en tu perfil")
     almacen().guardar_perfil(perfil)
-    return {"medios": medios.resumen(perfil)}
+    return {"medios": medios.resumen(perfil), "perfil": perfil.a_dict(privado=True)}
 
 
 @app.post("/api/yo/medios/orden")
@@ -671,6 +686,17 @@ def correr_automatch(perfil: Perfil = Depends(usuario)):
 # ---------------------------------------------------------------------------
 # Matches y chat
 # ---------------------------------------------------------------------------
+@app.post("/api/aciegas")
+def cita_a_ciegas(perfil: Perfil = Depends(usuario)):
+    """Abre una cita a ciegas: chat sí, fotos no, hasta que los dos escriban.
+
+    La elección respeta los filtros duros de los dos lados; las fotos no
+    salen del servidor hasta la revelación (ver `matcher/aciegas.py`).
+    """
+    m = aciegas.crear(almacen(), perfil)
+    return {"match_id": m.id, "umbral": aciegas.UMBRAL}
+
+
 @app.get("/api/matches")
 def lista_matches(perfil: Perfil = Depends(usuario)):
     return {"matches": almacen().matches_de(perfil.id)}

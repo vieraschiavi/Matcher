@@ -40,8 +40,7 @@ export class ErrorApi extends Error {
   }
 }
 
-async function pedir(ruta, { metodo = "GET", cuerpo } = {}) {
-  const t = token.leer();
+async function crudo(ruta, metodo, cuerpo, t) {
   const res = await fetch(`${BASE}/api${ruta}`, {
     method: metodo,
     headers: {
@@ -51,7 +50,30 @@ async function pedir(ruta, { metodo = "GET", cuerpo } = {}) {
     body: cuerpo ? JSON.stringify(cuerpo) : undefined,
   });
   const texto = await res.text();
-  const datos = texto ? JSON.parse(texto) : null;
+  return { res, datos: texto ? JSON.parse(texto) : null };
+}
+
+async function pedir(ruta, { metodo = "GET", cuerpo } = {}) {
+  const t = token.leer();
+  let { res, datos } = await crudo(ruta, metodo, cuerpo, t);
+
+  // Un 401 suelto NO cierra la sesión de una. En el despliegue serverless una
+  // instancia recién levantada puede no tener el perfil todavía y devolver
+  // 401 con un token perfectamente válido; cerrar la sesión por eso es lo que
+  // hacía que "se cierre sola". Se sondea /api/yo: si la sonda pasa, el 401
+  // era un espasmo de una instancia — se reintenta una vez y listo. Sólo si
+  // la sonda también da 401 la sesión está muerta de verdad.
+  if (res.status === 401 && t && ruta !== "/yo") {
+    try {
+      const sonda = await crudo("/yo", "GET", undefined, t);
+      if (sonda.res.ok) {
+        ({ res, datos } = await crudo(ruta, metodo, cuerpo, t));
+      }
+    } catch {
+      /* sin red: que caiga por el camino normal */
+    }
+  }
+
   if (!res.ok) {
     if (res.status === 401) {
       token.borrar();
@@ -102,6 +124,7 @@ export const api = {
   sugerenciasAuto: () => pedir("/automatch/sugerencias"),
   correrAuto: () => pedir("/automatch", { metodo: "POST" }),
 
+  citaACiegas: () => pedir("/aciegas", { metodo: "POST" }),
   matches: () => pedir("/matches"),
   mensajes: (id) => pedir(`/matches/${id}/mensajes`),
   enviar: (id, texto) => pedir(`/matches/${id}/mensajes`, { metodo: "POST", cuerpo: { texto } }),

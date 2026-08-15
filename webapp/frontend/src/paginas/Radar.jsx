@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
+import { useApp } from "../estado";
+import { soloPermitidos } from "../filtroCliente";
 import { IcoCorazon, IcoPin, IcoRayo, IcoVerificado } from "../Iconos";
 import Mapa from "../componentes/Mapa";
 
@@ -21,6 +23,7 @@ function posicionEnRadar(distanciaKm, rumbo, radioKm) {
 
 export default function Radar() {
   const navegar = useNavigate();
+  const { perfil } = useApp();
   const [datos, setDatos] = useState(null);
   const [cruces, setCruces] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -38,7 +41,10 @@ export default function Radar() {
   // vista: la pantalla parecía rota.
   const cargarRadar = async (radio) => {
     try {
-      setDatos(await api.radar(radio));
+      const r = await api.radar(radio);
+      // Cinturón y tiradores del filtro duro (ver filtroCliente.js).
+      r.personas = soloPermitidos(perfil?.preferencias, r.personas);
+      setDatos(r);
       setFallo("");
     } catch (e) {
       setFallo(e.message);
@@ -50,7 +56,10 @@ export default function Radar() {
   // Los cruces se muestran EN esta pantalla, no detrás de un botón que lleva a
   // otra: es la mitad de lo que la gente viene a ver acá.
   useEffect(() => {
-    api.cruces().then(setCruces).catch(() => setCruces(null));
+    api.cruces()
+      .then((r) => setCruces({ ...r, personas: soloPermitidos(perfil?.preferencias, r.personas) }))
+      .catch(() => setCruces(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pulso]);
 
   // Pide GPS una vez al entrar y cada 5 minutos mientras la pantalla está

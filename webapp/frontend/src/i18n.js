@@ -136,6 +136,17 @@ const PT = {
     "Todos os filtros estão no plano grátis. O que se paga é volume e visibilidade, não o direito de filtrar pelo que importa para você.",
   "Elegido": "Escolhido",
 
+  // -- cita a ciegas / likes --
+  "Cita a ciegas": "Encontro às cegas",
+  "Primero la charla, después las caras": "Primeiro a conversa, depois os rostos",
+  "Revelado": "Revelado",
+  "Las fotos se revelan cuando los dos escriben": "As fotos são reveladas quando os dois escrevem",
+  "mensajes cada uno.": "mensagens cada um.",
+  "Vos": "Você",
+  "Responder like": "Responder like",
+  "¿Borrar esta foto o video? No se puede deshacer.": "Excluir esta foto ou vídeo? Não dá para desfazer.",
+  "Este servidor de demostración borra los datos cada vez que se reinicia: la cuenta y las fotos que subas se van a perder. Para probar sin sorpresas, usá una de las cuentas de demo de abajo.":
+    "Este servidor de demonstração apaga os dados a cada reinício: a conta e as fotos que você subir vão se perder. Para testar sem surpresas, use uma das contas de demo abaixo.",
   // -- perfil / medios --
   "Tus fotos": "Suas fotos",
   "Tus videos": "Seus vídeos",
@@ -253,6 +264,17 @@ const EN = {
     "Every filter is in the free plan. What you pay for is volume and visibility, never the right to filter by what matters to you.",
   "Elegido": "Selected",
 
+  // -- blind date / likes --
+  "Cita a ciegas": "Blind date",
+  "Primero la charla, después las caras": "Talk first, faces later",
+  "Revelado": "Revealed",
+  "Las fotos se revelan cuando los dos escriben": "Photos unlock once you both write",
+  "mensajes cada uno.": "messages each.",
+  "Vos": "You",
+  "Responder like": "Like back",
+  "¿Borrar esta foto o video? No se puede deshacer.": "Delete this photo or video? This cannot be undone.",
+  "Este servidor de demostración borra los datos cada vez que se reinicia: la cuenta y las fotos que subas se van a perder. Para probar sin sorpresas, usá una de las cuentas de demo de abajo.":
+    "This demo server wipes its data on every restart: any account and photos you upload will be lost. To try it without surprises, use one of the demo accounts below.",
   "Tus fotos": "Your photos",
   "Tus videos": "Your videos",
   "Sacar foto": "Take a photo",
