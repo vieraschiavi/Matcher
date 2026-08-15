@@ -454,16 +454,29 @@ TECHO_MULTIPLICADOR = 12.0
 PASO_MULTIPLICADOR = 0.01
 
 
-def rentable_desde(corrida: Corrida, mes: int) -> bool:
-    """Verde en ese mes y en TODOS los que siguen. 'Rentable desde el mes 6'
-    no puede significar un mes bueno suelto y después rojo de nuevo."""
-    return all(m.resultado_neto >= 0 for m in corrida.meses[mes - 1 :])
+def rentable_desde(corrida: Corrida, mes: int, umbral: float = 0.0) -> bool:
+    """Resultado del mes ≥ umbral, en ese mes y en TODOS los que siguen.
+    'Rentable desde el mes 6' no puede significar un mes bueno suelto y
+    después rojo de nuevo — ni un pico que después no se sostiene."""
+    return all(m.resultado_neto >= umbral for m in corrida.meses[mes - 1 :])
+
+
+def primer_mes_sostenido(corrida: Corrida, umbral: float = 0.0) -> int | None:
+    """El primer mes desde el que el resultado se queda arriba del umbral
+    para siempre. `None` si nunca se sostiene dentro del horizonte corrido."""
+    return next(
+        (m.numero for m in corrida.meses if rentable_desde(corrida, m.numero, umbral)),
+        None,
+    )
 
 
 def multiplicador_para_rentable_desde(
-    e: Escenario, mes: int, techo: float = TECHO_MULTIPLICADOR
+    e: Escenario,
+    mes: int,
+    techo: float = TECHO_MULTIPLICADOR,
+    umbral: float = 0.0,
 ) -> float | None:
-    """El precio más bajo que deja el negocio en verde a partir de ese mes.
+    """El precio más bajo que deja el resultado ≥ umbral a partir de ese mes.
 
     Se barre en vez de hacer búsqueda binaria a propósito: con elasticidad, la
     curva de resultado contra precio NO es monótona —a partir de cierto punto
@@ -473,7 +486,7 @@ def multiplicador_para_rentable_desde(
     """
     m = 1.0
     while m <= techo + 1e-9:
-        if rentable_desde(correr(replace(e, multiplicador_precio=m)), mes):
+        if rentable_desde(correr(replace(e, multiplicador_precio=m)), mes, umbral):
             return round(m, 2)
         m += PASO_MULTIPLICADOR
     return None
@@ -491,6 +504,73 @@ def recorte_pauta_para_rentable_desde(
             return round(fraccion, 2)
         fraccion -= 0.01
     return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# El techo estructural: cuánto da esto en estado estable, sin importar cuánto
+# se espere.
+#
+# Sin pauta, cuántas altas entran por mes NO depende del precio — sólo de
+# `organicos_base` y `factor_viral`. Eso fija un padrón de equilibrio
+# (`usuarios_ss`) que es el mismo a cualquier precio; el precio sólo mueve
+# CUÁNTOS de esos usuarios pagan y CUÁNTO deja cada uno. Por eso "esperar más
+# meses" no ayuda si el escenario no da para más: a partir de cierto mes el
+# resultado ya está en su techo y ahí se queda.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class Techo:
+    usuarios: float
+    suscriptores: float
+    ingreso: float
+    costo: float
+
+    @property
+    def neto(self) -> float:
+        return self.ingreso - self.costo
+
+
+def techo_estructural(e: Escenario) -> Techo | None:
+    """Resultado mensual de equilibrio, sin pauta. `None` si el boca a boca es
+    tan fuerte que el padrón nunca se estabiliza (factor_viral ≥ churn_usuario:
+    crecimiento sin techo, que ningún escenario de este modelo tiene, pero que
+    hay que contemplar para no dividir por cero o por negativo)."""
+    if e.factor_viral >= e.churn_usuario:
+        return None
+    usuarios = e.organicos_base / (e.churn_usuario - e.factor_viral)
+    suscriptores = usuarios * e.share_pagador
+    ingreso = suscriptores * e.arpu_neto()
+    altas = usuarios * e.churn_usuario
+    infra = (
+        hosting(int(usuarios))
+        + usuarios * GB_POR_USUARIO * PRECIO_GB_MES
+        + usuarios * GB_TRAFICO_POR_USUARIO_MES * PRECIO_GB_TRAFICO
+        + CORREO_TRANSACCIONAL_MES
+    )
+    moderacion = (
+        altas * FOTOS_POR_ALTA * COSTO_MODERACION_AUTOMATICA
+        + (altas / ALTAS_POR_HORA_REVISION) * COSTO_HORA_HUMANA
+        + (usuarios / USUARIOS_POR_HORA_SOPORTE) * COSTO_HORA_HUMANA
+    )
+    fijos = CONTADOR_MES + DOMINIO_ANUAL / 12
+    return Techo(usuarios, suscriptores, ingreso, infra + moderacion + fijos)
+
+
+def mejor_precio_estructural(
+    e: Escenario, techo_mult: float = TECHO_MULTIPLICADOR, paso: float = 0.05
+) -> tuple[float, Techo]:
+    """El multiplicador de precio que maximiza el techo estructural. Se barre
+    por la misma razón que `multiplicador_para_rentable_desde`: la curva no es
+    monótona, tiene un máximo interior."""
+    mejor_mult, mejor_t = 1.0, techo_estructural(e)
+    m = 1.0
+    while m <= techo_mult + 1e-9:
+        t = techo_estructural(replace(e, multiplicador_precio=m))
+        if t is not None and (mejor_t is None or t.neto > mejor_t.neto):
+            mejor_mult, mejor_t = m, t
+        m += paso
+    return round(mejor_mult, 2), mejor_t
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1072,8 +1152,114 @@ def generar(corridas: list[Corrida]) -> str:
     a("   de igual a igual con marcas que tienen mil veces tu presupuesto.")
     a("")
 
+    # ── ¿Precio competitivo para ganar USD 1.000 netos por mes? ─────────────
+    a("## 10. ¿Qué precio hace falta para ganar USD 1.000 netos por mes, y en qué mes?")
+    a("")
+    a("Otra pregunta concreta, y tiene una respuesta incómoda: **en Pesimista y")
+    a("en Base, ningún precio la alcanza — ni esperando, ni cobrando más.** No es")
+    a("un problema de precio, es un techo de escala. En Optimista sí se llega, y")
+    a("no hace falta subir el precio para lograrlo.")
+    a("")
+    a("### Por qué hay un techo que ni el tiempo mueve")
+    a("")
+    a("Sin pauta, cuántas altas entran por mes **no depende del precio** — sólo")
+    a("de las altas orgánicas y el boca a boca (`organicos_base` y")
+    a("`factor_viral`). Eso fija un padrón de equilibrio que es el mismo a")
+    a("cualquier precio; el precio sólo decide cuántos de esos usuarios pagan y")
+    a("cuánto deja cada uno. Corriendo la simulación 60 y 120 meses en vez de 24,")
+    a("el padrón no crece más allá de cierto punto — así que \"esperar más\" no es")
+    a("la respuesta si el escenario no da para más.")
+    a("")
+    a("| Escenario | Padrón de equilibrio | Suscriptores de equilibrio | Techo mensual (al precio de hoy) |")
+    a("|---|---:|---:|---:|")
+    for c in corridas:
+        e = c.escenario
+        t = techo_estructural(e)
+        if t is None:
+            a(f"| {e.nombre} | — | — | crecimiento sin techo |")
+        else:
+            a(f"| {e.nombre} | {_n(t.usuarios)} | {_n(t.suscriptores)} | USD {_u(t.neto)} |")
+    a("")
+    a("### Moviendo el precio, el techo casi no se mueve")
+    a("")
+    a("| Escenario | Mejor precio Plus posible | Techo mensual en ese precio | Techo mensual al precio de hoy |")
+    a("|---|---:|---:|---:|")
+    for c in corridas:
+        e = c.escenario
+        mult, t = mejor_precio_estructural(e)
+        t_hoy = techo_estructural(e)
+        if t is None or t_hoy is None:
+            a(f"| {e.nombre} | — | — | — |")
+        else:
+            a(
+                f"| {e.nombre} | USD {_d(planes.PLANES['plus'].precio_mes * mult)} "
+                f"| USD {_u(t.neto)} | USD {_u(t_hoy.neto)} |"
+            )
+    a("")
+    pesimista_t = techo_estructural(next(c.escenario for c in corridas if c.escenario.codigo == "pesimista"))
+    base_t = techo_estructural(next(c.escenario for c in corridas if c.escenario.codigo == "base"))
+    a(
+        f"En **Pesimista** el techo es negativo (USD {_u(pesimista_t.neto)}/mes): el"
+        if pesimista_t
+        else "En **Pesimista** no hay techo definido."
+    )
+    a("padrón de equilibrio es tan chico que ni cobrando gratis los costos fijos")
+    a("se pagan solos. En **Base**, el precio de hoy ya está prácticamente en el")
+    a(f"óptimo — el techo es USD {_u(base_t.neto)}/mes y no USD 1.000 por más que")
+    a("se ajuste el precio para arriba o para abajo: el padrón de equilibrio")
+    a(f"({_n(base_t.usuarios)} personas) es demasiado chico. **En ninguno de los dos")
+    a("hay un precio que resuelva esto — hace falta un mercado más grande, no un")
+    a("número de lista distinto.**")
+    a("")
+    a("### Optimista sí llega, y no hace falta tocar el precio para lograrlo")
+    a("")
+    optimista = next(c.escenario for c in corridas if c.escenario.codigo == "optimista")
+    a("| | Primer mes con ≥ USD 1.000/mes sostenido | Acumulado a 24 meses |")
+    a("|---|---:|---:|")
+    for etiqueta, alt in (
+        ("Con el precio de hoy, sin pauta", replace(optimista, presupuesto=[0.0] * MESES)),
+        (
+            "Con Plus a USD 7,98 (× 2), sin pauta",
+            replace(optimista, presupuesto=[0.0] * MESES, multiplicador_precio=2.0),
+        ),
+        ("Con el precio de hoy, y la pauta del plan (sección 4)", optimista),
+        (
+            "Con Plus a USD 7,98 (× 2), y la pauta del plan",
+            replace(optimista, multiplicador_precio=2.0),
+        ),
+    ):
+        c_alt = correr(alt)
+        p = primer_mes_sostenido(c_alt, 1000)
+        a(
+            f"| {etiqueta} | {'mes ' + str(p) if p else 'no llega en 24 meses'} "
+            f"| USD {_u(c_alt.acumulado(24))} |"
+        )
+    a("")
+    a("La fila que conviene mirar es la primera: **con el precio de hoy y sin")
+    a("gastar en pauta, Optimista sostiene USD 1.000 netos por mes desde el mes")
+    a("14.** Subir el precio a USD 7,98 lo adelanta apenas dos meses (mes 12) y")
+    a("mueve poco el acumulado — otra vez la curva chata de la sección 9. Correr")
+    a("la pauta del plan sí suma bastante al acumulado de 24 meses, pero **atrasa**")
+    a("el mes en que se llega a USD 1.000 sostenidos, porque el gasto fuerte de")
+    a("los primeros meses pega antes de que la cohorte pagada madure.")
+    a("")
+    a("### La respuesta corta")
+    a("")
+    a("1. **No es una pregunta de precio, es una pregunta de tracción.** El precio")
+    a("   competitivo para ganar USD 1.000 netos por mes es, literalmente, el que")
+    a("   ya tenés: USD 3,99 el Plus. Lo que falta no es cobrar más, es que el")
+    a("   escenario sea Optimista y no Base — o sea, que el boca a boca funcione")
+    a("   de verdad, lo cual depende de densidad local y de producto, no de precio.")
+    a("2. **Si el crecimiento se parece al escenario Optimista**, USD 1.000 netos")
+    a("   por mes se sostienen desde el **mes 14**, sin gastar un peso en")
+    a("   publicidad y sin tocar el precio.")
+    a("3. **Un ajuste de precio moderado (Plus a USD 6–8) ayuda, pero poco**: unos")
+    a("   meses antes y algo más de acumulado, nunca el cambio que hace o deshace")
+    a("   la meta.")
+    a("")
+
     # ── Trabajo propio ──────────────────────────────────────────────────────
-    a("## 10. El costo que el modelo no cobra: tu tiempo")
+    a("## 11. El costo que el modelo no cobra: tu tiempo")
     a("")
     a("Ninguno de los números de arriba descuenta el trabajo propio. Si se")
     a("valorizara a USD 15 la hora:")
@@ -1090,7 +1276,7 @@ def generar(corridas: list[Corrida]) -> str:
     a("")
 
     # ── Conclusión ──────────────────────────────────────────────────────────
-    a("## 11. Conclusión honesta")
+    a("## 12. Conclusión honesta")
     a("")
     ltv_min = min(ltv(c.escenario) for c in corridas)
     ltv_max = max(ltv(c.escenario) for c in corridas)
@@ -1107,17 +1293,23 @@ def generar(corridas: list[Corrida]) -> str:
     a("   porque el agujero de ese mes es la publicidad. Y sin pauta, el mes 6")
     a("   ya está en verde con el precio de hoy. El precio decide con qué")
     a("   argumento salís a competir; el resultado lo decide otra cosa.")
-    a("3. **El único camino que cierra es la densidad orgánica.** Una zona chica,")
+    a("3. **Y tampoco hay precio que llegue a USD 1.000 netos por mes en")
+    a("   Pesimista o en Base** (sección 10): el precio de hoy ya está casi en")
+    a(f"   el óptimo — el techo de Base es USD {_u(base_t.neto)}/mes, no USD 1.000,")
+    a("   porque el padrón de equilibrio es demasiado chico. Ese número sí se")
+    a("   alcanza en Optimista, **desde el mes 14 y sin tocar el precio**: lo que")
+    a("   decide no es cuánto cobrás, es si el boca a boca prende de verdad.")
+    a("4. **El único camino que cierra es la densidad orgánica.** Una zona chica,")
     a("   presencia real, boca a boca. Es más lento y menos glamoroso que")
     a("   apretar 'aumentar presupuesto', y en este modelo es la diferencia entre")
     a(f"   terminar en USD {_u(sin_pauta)} o en USD {_u(referencia)}.")
-    a("4. **Antes de gastar un peso en pauta hay tres cosas sin resolver** y")
+    a("5. **Antes de gastar un peso en pauta hay tres cosas sin resolver** y")
     a("   están todas en `docs/PUBLICAR.md`: el backend efímero (las cuentas y")
     a("   las fotos se pierden en cada arranque en frío), la moderación")
     a("   inexistente y las fotos guardadas dentro de la base. Publicitar una app")
     a("   con esos tres problemas quema el dinero y la reputación a la vez: el")
     a("   usuario que se va por una mala primera impresión no vuelve.")
-    a("5. **El orden correcto es**: backend con disco → moderación → 200 usuarios")
+    a("6. **El orden correcto es**: backend con disco → moderación → 200 usuarios")
     a("   reales en un radio de pocos kilómetros → medir conversión y churn de")
     a("   verdad → recién ahí volver a este archivo, reemplazar los supuestos por")
     a("   lo medido y correrlo de nuevo. Ese, y no el número de hoy, es el")

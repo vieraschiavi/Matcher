@@ -538,7 +538,78 @@ en la pantalla de planes.
    Arriba de eso dejás de ser «lo mismo por una fracción» y pasás a competir
    de igual a igual con marcas que tienen mil veces tu presupuesto.
 
-## 10. El costo que el modelo no cobra: tu tiempo
+## 10. ¿Qué precio hace falta para ganar USD 1.000 netos por mes, y en qué mes?
+
+Otra pregunta concreta, y tiene una respuesta incómoda: **en Pesimista y
+en Base, ningún precio la alcanza — ni esperando, ni cobrando más.** No es
+un problema de precio, es un techo de escala. En Optimista sí se llega, y
+no hace falta subir el precio para lograrlo.
+
+### Por qué hay un techo que ni el tiempo mueve
+
+Sin pauta, cuántas altas entran por mes **no depende del precio** — sólo
+de las altas orgánicas y el boca a boca (`organicos_base` y
+`factor_viral`). Eso fija un padrón de equilibrio que es el mismo a
+cualquier precio; el precio sólo decide cuántos de esos usuarios pagan y
+cuánto deja cada uno. Corriendo la simulación 60 y 120 meses en vez de 24,
+el padrón no crece más allá de cierto punto — así que "esperar más" no es
+la respuesta si el escenario no da para más.
+
+| Escenario | Padrón de equilibrio | Suscriptores de equilibrio | Techo mensual (al precio de hoy) |
+|---|---:|---:|---:|
+| Pesimista | 414 | 5 | USD -74 |
+| Base | 1.538 | 69 | USD 163 |
+| Optimista | 6.667 | 606 | USD 2.289 |
+
+### Moviendo el precio, el techo casi no se mueve
+
+| Escenario | Mejor precio Plus posible | Techo mensual en ese precio | Techo mensual al precio de hoy |
+|---|---:|---:|---:|
+| Pesimista | USD 3,99 | USD -74 | USD -74 |
+| Base | USD 3,99 | USD 163 | USD 163 |
+| Optimista | USD 7,78 | USD 2.324 | USD 2.289 |
+
+En **Pesimista** el techo es negativo (USD -74/mes): el
+padrón de equilibrio es tan chico que ni cobrando gratis los costos fijos
+se pagan solos. En **Base**, el precio de hoy ya está prácticamente en el
+óptimo — el techo es USD 163/mes y no USD 1.000 por más que
+se ajuste el precio para arriba o para abajo: el padrón de equilibrio
+(1.538 personas) es demasiado chico. **En ninguno de los dos
+hay un precio que resuelva esto — hace falta un mercado más grande, no un
+número de lista distinto.**
+
+### Optimista sí llega, y no hace falta tocar el precio para lograrlo
+
+| | Primer mes con ≥ USD 1.000/mes sostenido | Acumulado a 24 meses |
+|---|---:|---:|
+| Con el precio de hoy, sin pauta | mes 14 | USD 21.124 |
+| Con Plus a USD 7,98 (× 2), sin pauta | mes 12 | USD 22.260 |
+| Con el precio de hoy, y la pauta del plan (sección 4) | mes 18 | USD 9.700 |
+| Con Plus a USD 7,98 (× 2), y la pauta del plan | mes 17 | USD 14.759 |
+
+La fila que conviene mirar es la primera: **con el precio de hoy y sin
+gastar en pauta, Optimista sostiene USD 1.000 netos por mes desde el mes
+14.** Subir el precio a USD 7,98 lo adelanta apenas dos meses (mes 12) y
+mueve poco el acumulado — otra vez la curva chata de la sección 9. Correr
+la pauta del plan sí suma bastante al acumulado de 24 meses, pero **atrasa**
+el mes en que se llega a USD 1.000 sostenidos, porque el gasto fuerte de
+los primeros meses pega antes de que la cohorte pagada madure.
+
+### La respuesta corta
+
+1. **No es una pregunta de precio, es una pregunta de tracción.** El precio
+   competitivo para ganar USD 1.000 netos por mes es, literalmente, el que
+   ya tenés: USD 3,99 el Plus. Lo que falta no es cobrar más, es que el
+   escenario sea Optimista y no Base — o sea, que el boca a boca funcione
+   de verdad, lo cual depende de densidad local y de producto, no de precio.
+2. **Si el crecimiento se parece al escenario Optimista**, USD 1.000 netos
+   por mes se sostienen desde el **mes 14**, sin gastar un peso en
+   publicidad y sin tocar el precio.
+3. **Un ajuste de precio moderado (Plus a USD 6–8) ayuda, pero poco**: unos
+   meses antes y algo más de acumulado, nunca el cambio que hace o deshace
+   la meta.
+
+## 11. El costo que el modelo no cobra: tu tiempo
 
 Ninguno de los números de arriba descuenta el trabajo propio. Si se
 valorizara a USD 15 la hora:
@@ -549,7 +620,7 @@ valorizara a USD 15 la hora:
 | Base | 80 | USD 28.800 | USD -54.792 |
 | Optimista | 120 | USD 43.200 | USD -33.500 |
 
-## 11. Conclusión honesta
+## 12. Conclusión honesta
 
 1. **Con pauta paga, a este precio, el modelo no cierra.** Un suscriptor
    de Matcher deja entre USD 8,86 y USD 19,06 en toda su
@@ -564,17 +635,23 @@ valorizara a USD 15 la hora:
    porque el agujero de ese mes es la publicidad. Y sin pauta, el mes 6
    ya está en verde con el precio de hoy. El precio decide con qué
    argumento salís a competir; el resultado lo decide otra cosa.
-3. **El único camino que cierra es la densidad orgánica.** Una zona chica,
+3. **Y tampoco hay precio que llegue a USD 1.000 netos por mes en
+   Pesimista o en Base** (sección 10): el precio de hoy ya está casi en
+   el óptimo — el techo de Base es USD 163/mes, no USD 1.000,
+   porque el padrón de equilibrio es demasiado chico. Ese número sí se
+   alcanza en Optimista, **desde el mes 14 y sin tocar el precio**: lo que
+   decide no es cuánto cobrás, es si el boca a boca prende de verdad.
+4. **El único camino que cierra es la densidad orgánica.** Una zona chica,
    presencia real, boca a boca. Es más lento y menos glamoroso que
    apretar 'aumentar presupuesto', y en este modelo es la diferencia entre
    terminar en USD 1.353 o en USD -25.992.
-4. **Antes de gastar un peso en pauta hay tres cosas sin resolver** y
+5. **Antes de gastar un peso en pauta hay tres cosas sin resolver** y
    están todas en `docs/PUBLICAR.md`: el backend efímero (las cuentas y
    las fotos se pierden en cada arranque en frío), la moderación
    inexistente y las fotos guardadas dentro de la base. Publicitar una app
    con esos tres problemas quema el dinero y la reputación a la vez: el
    usuario que se va por una mala primera impresión no vuelve.
-5. **El orden correcto es**: backend con disco → moderación → 200 usuarios
+6. **El orden correcto es**: backend con disco → moderación → 200 usuarios
    reales en un radio de pocos kilómetros → medir conversión y churn de
    verdad → recién ahí volver a este archivo, reemplazar los supuestos por
    lo medido y correrlo de nuevo. Ese, y no el número de hoy, es el

@@ -224,6 +224,116 @@ def test_el_hosting_sube_por_escalones():
     assert mn.hosting(10) < mn.hosting(5_000) < mn.hosting(50_000) < mn.hosting(500_000)
 
 
+def test_rentable_desde_acepta_un_umbral_distinto_de_cero(base):
+    corrida = mn.correr(base)
+    # Nunca llega a 1.000 netos sostenidos con la pauta puesta: el umbral por
+    # default (0) ya fallaba, y uno más exigente tiene que seguir fallando.
+    assert not mn.rentable_desde(corrida, 6, umbral=1000)
+    # Un umbral bien negativo, en cambio, cualquier mes lo cumple.
+    assert mn.rentable_desde(corrida, 1, umbral=-1_000_000)
+
+
+def test_primer_mes_sostenido_es_consistente_con_rentable_desde(base):
+    corrida = mn.correr(base)
+    primero = mn.primer_mes_sostenido(corrida)
+    # 'None' o el primer mes en que rentable_desde da True y todo lo anterior no.
+    if primero is None:
+        assert all(not mn.rentable_desde(corrida, m.numero) for m in corrida.meses)
+    else:
+        assert mn.rentable_desde(corrida, primero)
+        assert not mn.rentable_desde(corrida, primero - 1) or primero == 1
+
+
+def test_el_techo_estructural_coincide_con_una_corrida_larga(base):
+    """La fórmula analítica del padrón de equilibrio tiene que coincidir con lo
+    que da simular 10 años en vez de 2. Si se desalinean, el documento estaría
+    prometiendo un techo que la simulación real no sostiene."""
+
+    def simular_usuarios_y_suscriptores(e: mn.Escenario, meses: int) -> tuple[float, float]:
+        usuarios = suscriptores = 0.0
+        for _ in range(meses):
+            altas = e.organicos_base + e.factor_viral * usuarios
+            usuarios = usuarios * (1 - e.churn_usuario) + altas
+            libres = max(0.0, usuarios - suscriptores)
+            nuevos = libres * e.conversion_efectiva
+            suscriptores = min(
+                usuarios, suscriptores * (1 - e.churn_suscriptor_efectivo) + nuevos
+            )
+        return usuarios, suscriptores
+
+    for e in mn.ESCENARIOS:
+        techo = mn.techo_estructural(e)
+        assert techo is not None
+        u_120, s_120 = simular_usuarios_y_suscriptores(e, 120)
+        assert techo.usuarios == pytest.approx(u_120, rel=1e-3)
+        assert techo.suscriptores == pytest.approx(s_120, rel=1e-2)
+
+
+def test_el_techo_no_depende_del_horizonte_una_vez_estabilizado(base):
+    """'Esperar más meses' no debería cambiar el techo: a los 60 meses ya casi
+    no se mueve respecto a los 120."""
+
+    def usuarios_en(e: mn.Escenario, meses: int) -> float:
+        usuarios = 0.0
+        for _ in range(meses):
+            usuarios = usuarios * (1 - e.churn_usuario) + e.organicos_base + e.factor_viral * usuarios
+        return usuarios
+
+    for e in mn.ESCENARIOS:
+        u60 = usuarios_en(e, 60)
+        u120 = usuarios_en(e, 120)
+        assert u120 == pytest.approx(u60, rel=5e-3)
+
+
+def test_pesimista_y_base_no_alcanzan_los_mil_netos_ni_al_mejor_precio(base):
+    """La respuesta central de la sección 10: no es una cuestión de precio.
+    Ningún multiplicador de precio, hasta el techo de búsqueda, hace que
+    Pesimista o Base sostengan USD 1.000 netos por mes en estado estable."""
+    pesimista = next(e for e in mn.ESCENARIOS if e.codigo == "pesimista")
+    for e in (pesimista, base):
+        _, techo = mn.mejor_precio_estructural(e)
+        assert techo.neto < 1000
+
+
+def test_optimista_si_alcanza_los_mil_netos_sin_tocar_el_precio(base):
+    optimista = next(e for e in mn.ESCENARIOS if e.codigo == "optimista")
+    techo = mn.techo_estructural(optimista)
+    assert techo.neto >= 1000
+    sin_pauta = replace(optimista, presupuesto=[0.0] * mn.MESES)
+    primero = mn.primer_mes_sostenido(mn.correr(sin_pauta), umbral=1000)
+    assert primero is not None
+    assert primero <= mn.MESES
+
+
+def test_subir_el_precio_mueve_poco_el_techo_de_optimista(base):
+    """La curva es chata: el mejor precio no multiplica el techo, lo mejora
+    apenas. Si un cambio futuro la volviera pronunciada, este test lo marca."""
+    optimista = next(e for e in mn.ESCENARIOS if e.codigo == "optimista")
+    techo_hoy = mn.techo_estructural(optimista)
+    _, techo_optimo = mn.mejor_precio_estructural(optimista)
+    assert techo_optimo.neto >= techo_hoy.neto
+    assert techo_optimo.neto < techo_hoy.neto * 1.5
+
+
+def test_el_techo_estructural_respeta_el_precio_de_planes(base):
+    doble = replace(base, multiplicador_precio=2.0)
+    techo_1 = mn.techo_estructural(base)
+    techo_2 = mn.techo_estructural(doble)
+    # Mismo padrón (el precio no cambia cuánta gente entra sin pauta)...
+    assert techo_1.usuarios == pytest.approx(techo_2.usuarios)
+    # ...pero menos suscriptores, porque cobrar más espanta conversión.
+    assert techo_2.suscriptores < techo_1.suscriptores
+
+
+def test_el_techo_es_none_si_el_boca_a_boca_iguala_o_supera_el_churn():
+    """Caso de borde: si el factor viral alcanza al churn, el padrón crece sin
+    límite y no hay un equilibrio que calcular — tiene que devolver None y no
+    un número inventado o una división por cero."""
+    base = next(e for e in mn.ESCENARIOS if e.codigo == "base")
+    sin_techo = replace(base, factor_viral=base.churn_usuario)
+    assert mn.techo_estructural(sin_techo) is None
+
+
 def test_el_documento_se_genera_con_las_secciones_pedidas(tmp_path):
     destino = tmp_path / "PLAN.md"
     assert mn.main([str(destino)]) == 0
