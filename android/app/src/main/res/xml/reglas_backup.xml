@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  El backup de Android se lleva los datos de la app a la nube y a `adb backup`.
+  Acá adentro vive el localStorage del WebView, y ahí está el TOKEN DE SESIÓN.
+  Un backup restaurado en otro teléfono sería una sesión iniciada de otra
+  persona, así que no se respalda nada.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+    </device-transfer>
+</data-extraction-rules>

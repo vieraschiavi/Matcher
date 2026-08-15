@@ -3,8 +3,9 @@ import Logo from "./Logo";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
 import { useApp } from "./estado";
-import { soloPermitidos } from "./filtroCliente";
-import { alAvisar, avisar } from "./avisos";
+import { preferenciasEfectivas, soloPermitidos } from "./filtroCliente";
+import { alAvisar, alFestejarMatch, avisar, festejarMatch } from "./avisos";
+import FestejoMatch from "./componentes/FestejoMatch";
 import { t } from "./i18n";
 import {
   IcoChat,
@@ -160,6 +161,27 @@ function Avisos() {
   );
 }
 
+// El festejo del match, montado una sola vez para toda la app: cualquier
+// pantalla lo dispara con `festejarMatch(...)`.
+function FestejoGlobal() {
+  const navegar = useNavigate();
+  const [match, setMatch] = useState(null);
+  useEffect(() => alFestejarMatch(setMatch), []);
+  if (!match) return null;
+  return (
+    <FestejoMatch
+      con={match.con}
+      compatibilidad={match.compatibilidad}
+      automatico={match.automatico}
+      onSeguir={() => setMatch(null)}
+      onChat={() => {
+        setMatch(null);
+        navegar(`/matches/${match.match_id}`);
+      }}
+    />
+  );
+}
+
 // Vista de "te gustaron". Vive acá porque es media pantalla y comparte todo
 // con el deck; separarla en su archivo era un import y nada más.
 function Likes() {
@@ -172,7 +194,7 @@ function Likes() {
     api
       .likesRecibidos()
       // Cinturón y tiradores del filtro duro (ver filtroCliente.js).
-      .then((r) => setDatos({ ...r, perfiles: soloPermitidos(perfil?.preferencias, r.perfiles) }))
+      .then((r) => setDatos({ ...r, perfiles: soloPermitidos(preferenciasEfectivas(perfil?.preferencias), r.perfiles) }))
       .catch(() => setDatos({ visible: false, cantidad: 0, perfiles: [] }));
   useEffect(() => {
     cargar();
@@ -186,9 +208,13 @@ function Likes() {
     setError("");
     try {
       const r = await api.interactuar(id, tipo);
-      try { navigator.vibrate?.(r.match ? [30, 60, 30, 60, 80] : 15); } catch { /* sin vibrador */ }
-      if (r.match) navegar(`/matches/${r.match_id}`);
-      else cargar();
+      if (r.match) {
+        festejarMatch(r);
+        cargar();
+      } else {
+        try { navigator.vibrate?.(15); } catch { /* sin vibrador */ }
+        cargar();
+      }
     } catch (e) {
       setError(e.message);
     }
@@ -302,6 +328,7 @@ export default function App() {
   return (
     <div className="layout" key={lang}>
       <Avisos />
+      <FestejoGlobal />
       <Barra globos={globos} />
       <BarraSuperior />
       <main className="main">

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { ErrorApi, api } from "../api";
-import { avisar } from "../avisos";
+import { avisar, festejarMatch } from "../avisos";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../estado";
-import { soloPermitidos } from "../filtroCliente";
+import { preferenciasEfectivas, soloPermitidos } from "../filtroCliente";
 
 export default function Ranking() {
   const { perfil } = useApp();
@@ -17,15 +17,15 @@ export default function Ranking() {
   const cargarHoy = () =>
     api
       .topDia()
-      .then((r) => setHoy(soloPermitidos(perfil?.preferencias, r.top)))
+      .then((r) => setHoy(soloPermitidos(preferenciasEfectivas(perfil?.preferencias), r.top)))
       .catch(() => setHoy([]));
 
   const likeDesdeHoy = async (id) => {
     try {
       const r = await api.interactuar(id, "like");
       if (r.match) {
-        avisar(t("¡Es un match!"), { tipo: "festejo", vibrar: [30, 60, 30, 60, 80] });
-        navegar(`/matches/${r.match_id}`);
+        festejarMatch(r);
+        cargarHoy();
       } else {
         avisar("Like enviado", { tipo: "ok", vibrar: 15 });
         cargarHoy();
@@ -37,7 +37,7 @@ export default function Ranking() {
 
   useEffect(() => {
     // Cinturón y tiradores del filtro duro (ver filtroCliente.js).
-    api.ranking(25).then((r) => setTop(soloPermitidos(perfil?.preferencias, r.top)));
+    api.ranking(25).then((r) => setTop(soloPermitidos(preferenciasEfectivas(perfil?.preferencias), r.top)));
     cargarHoy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     api.sugerenciasAuto().then(setSugerencias).catch(() => setSugerencias(null));

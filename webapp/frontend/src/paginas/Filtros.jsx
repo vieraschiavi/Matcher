@@ -6,7 +6,7 @@ import { useApp } from "../estado";
 import { GENEROS, INTENCIONES, POLITICAS, alternar } from "../vocabulario";
 
 export default function Filtros() {
-  const { perfil, catalogos, refrescar } = useApp();
+  const { perfil, catalogos, refrescar, guardarPreferencias } = useApp();
   const [p, setP] = useState(perfil?.preferencias);
   const [guardado, setGuardado] = useState("");
   const [error, setError] = useState("");
@@ -33,7 +33,7 @@ export default function Filtros() {
   const guardar = async () => {
     setError("");
     try {
-      await api.editar({ preferencias: p });
+      await guardarPreferencias(p);
       await refrescar();
       const d = await api.deck(20);
       setConteo(d.tarjetas.length);

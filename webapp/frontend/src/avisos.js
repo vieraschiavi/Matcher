@@ -27,3 +27,28 @@ export function alAvisar(fn) {
   window.addEventListener(EVENTO, oir);
   return () => window.removeEventListener(EVENTO, oir);
 }
+
+
+// --- festejo de match, global -----------------------------------------------
+//
+// El festejo vivía dentro de Descubrir, así que sólo salía al hacer match
+// deslizando. Los matches que nacen en "Te gustaron", el radar, los cruces,
+// el ranking o Crush Time llevaban derecho al chat y no se veía ni el fuego
+// ni el cartel — que es justo el momento que hay que celebrar. Ahora el
+// festejo lo monta App una sola vez y cualquier pantalla lo dispara.
+const MATCH = "matcher:match";
+
+export function festejarMatch(datos) {
+  try {
+    navigator.vibrate?.([30, 60, 30, 60, 80]);
+  } catch {
+    /* sin vibrador */
+  }
+  window.dispatchEvent(new CustomEvent(MATCH, { detail: datos }));
+}
+
+export function alFestejarMatch(fn) {
+  const oir = (e) => fn(e.detail);
+  window.addEventListener(MATCH, oir);
+  return () => window.removeEventListener(MATCH, oir);
+}

@@ -51,6 +51,11 @@
 	     en el momento de usarlo — y App Store rechaza el envío. Y tienen que
 	     decir para qué se usa de verdad: "necesitamos la cámara" sin motivo
 	     es causa de rechazo en la revisión. -->
+	<!-- La app sólo usa HTTPS estándar: no lleva criptografía propia. Sin
+	     esta clave, App Store Connect pregunta por exportación en CADA envío
+	     y el build queda trabado esperando respuesta. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Para sacarte fotos y grabar videos cortos para tu perfil, sin salir de la app.</string>
 	<key>NSMicrophoneUsageDescription</key>

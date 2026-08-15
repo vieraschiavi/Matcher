@@ -326,6 +326,15 @@ button { font-family: inherit; }
   .festejo-brasas span { opacity: .5; }
 }
 
+/* ---- zona de riesgo ---- */
+.panel-peligro { margin-top: 20px; border-color: rgba(255, 118, 117, .45); }
+.panel-peligro h3 { color: var(--red); }
+.panel-peligro p { color: var(--muted); font-size: 12.5px; max-width: 60ch; }
+.btn-peligro {
+  background: transparent; border: 1px solid var(--red); color: var(--red); font-weight: 700;
+}
+.btn-peligro:hover { background: rgba(255, 118, 117, .12); }
+
 /* ---- boost ---- */
 .panel-boost {
   display: flex; align-items: center; gap: 13px; padding: 14px 16px; margin-bottom: 16px;

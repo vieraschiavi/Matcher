@@ -16,6 +16,60 @@
 // Altura/política/equipo no viajan en todos los endpoints; el servidor sigue
 // siendo el dueño de esos.
 
+// --- memoria local de las preferencias --------------------------------------
+//
+// Medido contra el despliegue serverless: de 30 lecturas de /api/yo con el
+// filtro en "mujer", 17 devolvieron `[]`. Cada instancia resiembra su propia
+// base y el perfil vuelve a las preferencias por defecto, así que el deck que
+// arma esa instancia trae de todo. En 30 decks: 45 de 202 tarjetas eran del
+// género que el usuario NO pidió.
+//
+// El teléfono es el que sabe la verdad —fue el que hizo el cambio—, así que
+// guarda las preferencias y las usa para el filtro duro del cliente. Esto NO
+// reemplaza al servidor: el servidor sigue filtrando y sigue siendo el dueño
+// del dato. Es la garantía de que la promesa del producto ("si pedís mujeres,
+// no aparece un hombre BAJO NINGÚN CONCEPTO") se cumpla aunque el backend
+// esté en un disco efímero.
+
+const LLAVE = "matcher.preferencias";
+
+export function recordarPreferencias(preferencias) {
+  if (!preferencias) return;
+  try {
+    localStorage.setItem(LLAVE, JSON.stringify(preferencias));
+  } catch {
+    /* almacenamiento bloqueado: se sigue con lo que diga el servidor */
+  }
+}
+
+export function preferenciasRecordadas() {
+  try {
+    const crudo = localStorage.getItem(LLAVE);
+    return crudo ? JSON.parse(crudo) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function olvidarPreferencias() {
+  try {
+    localStorage.removeItem(LLAVE);
+  } catch {
+    /* nada que hacer */
+  }
+}
+
+/**
+ * Las preferencias que MANDAN para filtrar en el cliente.
+ *
+ * Gana lo guardado en este teléfono por sobre lo que devuelve el servidor:
+ * si difieren es porque el servidor perdió el cambio, nunca al revés — la
+ * única forma de cambiarlas es desde acá.
+ */
+export function preferenciasEfectivas(delServidor) {
+  return preferenciasRecordadas() || delServidor || null;
+}
+
 export function pasaFiltroCliente(preferencias, persona) {
   if (!preferencias || !persona) return true;
   const generos = preferencias.generos || [];

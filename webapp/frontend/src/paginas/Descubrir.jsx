@@ -3,9 +3,8 @@ import { t } from "../i18n";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
 import { useApp } from "../estado";
-import { soloPermitidos } from "../filtroCliente";
-import { avisar } from "../avisos";
-import FestejoMatch from "../componentes/FestejoMatch";
+import { preferenciasEfectivas, soloPermitidos } from "../filtroCliente";
+import { avisar, festejarMatch } from "../avisos";
 import {
   IcoCorazon,
   IcoCruz,
@@ -153,7 +152,6 @@ export default function Descubrir() {
   const [tarjetas, setTarjetas] = useState([]);
   const [diagnostico, setDiagnostico] = useState(null);
   const [cargando, setCargando] = useState(true);
-  const [match, setMatch] = useState(null);
   const [muro, setMuro] = useState(null);
   // El gesto vive en refs: nada de esto puede provocar un render mientras el
   // dedo se mueve.
@@ -166,7 +164,7 @@ export default function Descubrir() {
       const r = await api.deck(20);
       // Última línea de defensa del filtro duro: en serverless el deck puede
       // venir de una instancia que aún no vio tus preferencias nuevas.
-      const limpias = soloPermitidos(perfilRef.current?.preferencias, r.tarjetas);
+      const limpias = soloPermitidos(preferenciasEfectivas(perfilRef.current?.preferencias), r.tarjetas);
       setTarjetas(limpias);
       // Precargar las fotos de las próximas tarjetas: el swipe se siente
       // instantáneo en vez de mostrar un gris mientras baja la imagen.
@@ -212,10 +210,7 @@ export default function Descubrir() {
           { tipo: "ok" }
         );
       }
-      if (r.match) {
-        try { navigator.vibrate?.([30, 60, 30, 60, 80]); } catch { /* sin vibrador */ }
-        setMatch({ ...r, con: r.con });
-      }
+      if (r.match) festejarMatch(r);
     } catch (e) {
       if (e instanceof ErrorApi && e.sinCupo) {
         setMuro(e.cuerpo);
@@ -236,7 +231,7 @@ export default function Descubrir() {
   const correrAutomatch = async () => {
     const r = await api.correrAuto();
     setCupos(r.cupos);
-    if (r.creados.length) setMatch({ ...r.creados[0], automatico: true });
+    if (r.creados.length) festejarMatch({ ...r.creados[0], automatico: true });
     else setMuro({ detail: "No hay nadie que supere el umbral por ahora. Probá más tarde." });
   };
 
@@ -466,16 +461,6 @@ export default function Descubrir() {
           )}
         </div>
       </div>
-
-      {match && (
-        <FestejoMatch
-          con={match.con}
-          compatibilidad={match.compatibilidad}
-          automatico={match.automatico}
-          onSeguir={() => setMatch(null)}
-          onChat={() => navegar(`/matches/${match.match_id}`)}
-        />
-      )}
 
       {muro && (
         <div className="velo-modal" onClick={() => setMuro(null)}>

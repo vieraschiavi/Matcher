@@ -47,7 +47,11 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
+            // Ofusca y saca lo que no se usa. En una app cuyo grueso es un
+            // WebView el ahorro es modesto, pero deja el binario sin nombres
+            // de clase legibles, que es lo mínimo antes de publicar.
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             if (System.getenv("MATCHER_KEYSTORE")) {
                 signingConfig signingConfigs.release

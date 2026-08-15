@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
-import { avisar } from "../avisos";
+import { festejarMatch } from "../avisos";
 import { useApp } from "../estado";
 import { t } from "../i18n";
 import { IcoCorazon, IcoDiana } from "../Iconos";
@@ -47,7 +47,8 @@ export default function CrushTime() {
       const r = await api.crushtimeAdivinar(ronda.ronda, id);
       setResultado(r);
       if (r.acierto) {
-        avisar(t("¡Acertaste! Es un match"), { tipo: "festejo", vibrar: [30, 60, 30, 60, 80] });
+        // El fuego también acá: acertar en el juego es un match de verdad.
+        festejarMatch({ ...r, compatibilidad: r.con?.compatibilidad });
       } else {
         try { navigator.vibrate?.(60); } catch { /* sin vibrador */ }
       }

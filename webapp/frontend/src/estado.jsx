@@ -1,11 +1,29 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { SESION_CAIDA, api, token } from "./api";
 import { fijarIdioma, idioma, idiomaGuardado, resolverIdioma } from "./i18n";
+import {
+  olvidarPreferencias,
+  preferenciasEfectivas,
+  preferenciasRecordadas,
+  recordarPreferencias,
+} from "./filtroCliente";
 
 // Sesión + catálogos en un solo contexto. Los catálogos (países, ciudades,
 // equipos) se piden una vez y se comparten: son ~40 KB y no cambian durante
 // la sesión, pero se pedían en cuatro pantallas distintas.
 const Ctx = createContext(null);
+
+// Comparación laxa: sólo los campos que el filtro duro del cliente usa. Un
+// `JSON.stringify` de objetos con claves en distinto orden daría distinto y
+// dispararía una escritura al servidor en cada lectura.
+function mismasPreferencias(a, b) {
+  const lista = (x) => JSON.stringify([...(x || [])].sort());
+  return (
+    lista(a.generos) === lista(b.generos) &&
+    a.edad_min === b.edad_min &&
+    a.edad_max === b.edad_max
+  );
+}
 
 export function Proveedor({ children }) {
   const [perfil, setPerfil] = useState(null);
@@ -43,6 +61,15 @@ export function Proveedor({ children }) {
     }
     try {
       const r = await api.yo();
+      // Si este teléfono recuerda otras preferencias que las que devolvió el
+      // servidor, gana el teléfono y se las vuelve a imponer al servidor. Es
+      // auto-reparación: la instancia que perdió el cambio queda al día sola.
+      const recordadas = preferenciasRecordadas();
+      const delServidor = r.perfil?.preferencias;
+      if (recordadas && delServidor && !mismasPreferencias(recordadas, delServidor)) {
+        r.perfil = { ...r.perfil, preferencias: { ...delServidor, ...recordadas } };
+        api.editar({ preferencias: recordadas }).catch(() => {});
+      }
       setPerfil(r.perfil);
       setCupos(r.cupos);
     } catch {
@@ -107,11 +134,21 @@ export function Proveedor({ children }) {
     if (p) setPerfil(p);
   };
 
+  // Guardar filtros: se recuerdan en el teléfono ANTES de mandarlos, así el
+  // cliente puede seguir filtrando aunque el servidor pierda el cambio.
+  const guardarPreferencias = async (preferencias) => {
+    recordarPreferencias(preferencias);
+    const r = await api.editar({ preferencias });
+    if (r?.perfil) setPerfil(r.perfil);
+    return r;
+  };
+
   const salir = async () => {
     try {
       await api.logout();
     } finally {
       token.borrar();
+      olvidarPreferencias(); // otra persona en el mismo teléfono no hereda los filtros
       setPerfil(null);
       setCupos(null);
     }
@@ -122,6 +159,7 @@ export function Proveedor({ children }) {
       value={{
         perfil, cupos, catalogos, cargando, sesionCaida, lang, cambiarIdioma,
         entrar, entrarConToken, registrar, salir, refrescar, setCupos, aplicarPerfil,
+        guardarPreferencias, preferenciasEfectivas,
       }}
     >
       {children}

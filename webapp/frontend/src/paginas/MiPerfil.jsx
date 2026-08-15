@@ -6,7 +6,7 @@ import { useApp } from "../estado";
 import { INTENCIONES, alternar } from "../vocabulario";
 
 export default function MiPerfil() {
-  const { perfil, catalogos, refrescar, aplicarPerfil, lang, cambiarIdioma } = useApp();
+  const { perfil, catalogos, refrescar, aplicarPerfil, salir, lang, cambiarIdioma } = useApp();
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [borrador, setBorrador] = useState(null);
@@ -120,6 +120,25 @@ export default function MiPerfil() {
     try {
       const r = await api.subirVideo(url, segundos, bytes);
       aplicarPerfil(r.perfil);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  // Borrar la cuenta DESDE la app.
+  //
+  // No es un extra: App Store rechaza cualquier app que deje crear una cuenta
+  // y no deje borrarla desde adentro (y Play pide lo mismo, más un camino web
+  // para pedirlo). El endpoint ya existía; lo que faltaba era el botón.
+  //
+  // Es baja lógica, no DELETE físico: borrar la fila dejaría los matches del
+  // otro lado apuntando a la nada y les rompería el chat.
+  const borrarCuenta = async () => {
+    if (!window.confirm(t("¿Borrar tu cuenta? Tu perfil deja de aparecerle a todo el mundo y no vas a poder entrar de nuevo."))) return;
+    if (!window.confirm(t("Última confirmación: esto no se puede deshacer."))) return;
+    try {
+      await api.borrarCuenta();
+      await salir();
     } catch (e) {
       setError(e.message);
     }
@@ -397,6 +416,17 @@ export default function MiPerfil() {
           onCerrar={() => setCamara(null)}
         />
       )}
+      {/* Zona de riesgo, al final y separada: nadie borra su cuenta sin
+          querer si el botón no está pegado a "Guardar". */}
+      <div className="panel panel-peligro">
+        <h3>{t("Borrar mi cuenta")}</h3>
+        <p>
+          {t("Tu perfil deja de aparecerle a todo el mundo. Tus chats dejan de estar disponibles para vos. No se puede deshacer.")}
+        </p>
+        <button className="btn btn-peligro" onClick={borrarCuenta}>
+          {t("Borrar mi cuenta")}
+        </button>
+      </div>
     </>
   );
 }

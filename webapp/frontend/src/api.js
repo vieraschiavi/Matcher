@@ -105,6 +105,7 @@ export const api = {
   editar: (cambio) => pedir("/yo", { metodo: "PATCH", cuerpo: cambio }),
   marcarDisponible: () => pedir("/yo/disponible", { metodo: "POST" }),
   apagarDisponible: () => pedir("/yo/disponible", { metodo: "DELETE" }),
+  borrarCuenta: () => pedir("/yo", { metodo: "DELETE" }),
 
   subirFoto: (url, bytes) => pedir("/yo/fotos", { metodo: "POST", cuerpo: { url, bytes } }),
   subirVideo: (url, segundos, bytes) =>

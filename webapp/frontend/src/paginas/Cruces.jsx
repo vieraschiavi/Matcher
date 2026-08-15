@@ -3,7 +3,8 @@ import { t } from "../i18n";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
 import { useApp } from "../estado";
-import { soloPermitidos } from "../filtroCliente";
+import { festejarMatch } from "../avisos";
+import { preferenciasEfectivas, soloPermitidos } from "../filtroCliente";
 
 export default function Cruces() {
   const navegar = useNavigate();
@@ -15,7 +16,7 @@ export default function Cruces() {
     // colgada en "Cargando…" para siempre.
     // Cinturón y tiradores del filtro duro (ver filtroCliente.js).
     api.cruces()
-      .then((r) => setDatos({ ...r, personas: soloPermitidos(perfil?.preferencias, r.personas) }))
+      .then((r) => setDatos({ ...r, personas: soloPermitidos(preferenciasEfectivas(perfil?.preferencias), r.personas) }))
       .catch(() => setDatos({ resumen: {}, personas: [] }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -23,7 +24,7 @@ export default function Cruces() {
   const like = async (id) => {
     try {
       const r = await api.interactuar(id, "like");
-      if (r.match) navegar(`/matches/${r.match_id}`);
+      if (r.match) festejarMatch(r);
       else {
         const d = await api.cruces();
         setDatos(d);

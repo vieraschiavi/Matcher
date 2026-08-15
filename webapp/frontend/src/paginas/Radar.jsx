@@ -3,7 +3,8 @@ import { t } from "../i18n";
 import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
 import { useApp } from "../estado";
-import { soloPermitidos } from "../filtroCliente";
+import { festejarMatch } from "../avisos";
+import { preferenciasEfectivas, soloPermitidos } from "../filtroCliente";
 import { IcoCorazon, IcoPin, IcoRayo, IcoVerificado } from "../Iconos";
 import Mapa from "../componentes/Mapa";
 
@@ -43,7 +44,7 @@ export default function Radar() {
     try {
       const r = await api.radar(radio);
       // Cinturón y tiradores del filtro duro (ver filtroCliente.js).
-      r.personas = soloPermitidos(perfil?.preferencias, r.personas);
+      r.personas = soloPermitidos(preferenciasEfectivas(perfil?.preferencias), r.personas);
       setDatos(r);
       setFallo("");
     } catch (e) {
@@ -57,7 +58,7 @@ export default function Radar() {
   // otra: es la mitad de lo que la gente viene a ver acá.
   useEffect(() => {
     api.cruces()
-      .then((r) => setCruces({ ...r, personas: soloPermitidos(perfil?.preferencias, r.personas) }))
+      .then((r) => setCruces({ ...r, personas: soloPermitidos(preferenciasEfectivas(perfil?.preferencias), r.personas) }))
       .catch(() => setCruces(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pulso]);
@@ -104,7 +105,7 @@ export default function Radar() {
   const like = async (id) => {
     try {
       const r = await api.interactuar(id, "like");
-      if (r.match) navegar(`/matches/${r.match_id}`);
+      if (r.match) festejarMatch(r);
       else cargarRadar(radioKm);
     } catch (e) {
       if (e instanceof ErrorApi && e.sinCupo) navegar("/planes");
