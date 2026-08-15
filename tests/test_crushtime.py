@@ -87,7 +87,14 @@ def test_el_cupo_gratis_es_una_ronda_por_dia(almacen, hacer_perfil, ella):
     almacen.interactuar(hombres[1], ella.id, "like")
 
     r = crushtime.nueva_ronda(almacen, ella)
-    crushtime.adivinar(almacen, ella, r["ronda"], hombres[2].id)  # errada, turno gastado
+    # La equivocada se elige DE LA RONDA: los señuelos salen al azar del
+    # universo, así que un id cualquiera puede no estar entre las cuatro caras
+    # y `adivinar` lo rechaza por "no está en la ronda".
+    objetivo = almacen.con.execute(
+        "SELECT objetivo_id FROM crushtime WHERE id = ?", (r["ronda"],)
+    ).fetchone()["objetivo_id"]
+    equivocada = next(c["id"] for c in r["caras"] if c["id"] != objetivo)
+    crushtime.adivinar(almacen, ella, r["ronda"], equivocada)  # turno gastado
     with pytest.raises(crushtime.SinTurnos):
         crushtime.nueva_ronda(almacen, ella)
     # Al otro día vuelve a haber turno.

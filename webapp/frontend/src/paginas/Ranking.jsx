@@ -24,10 +24,10 @@ export default function Ranking() {
     try {
       const r = await api.interactuar(id, "like");
       if (r.match) {
-        avisar(t("¡Es un match!") + " 🎉", { tipo: "festejo", vibrar: [30, 60, 30, 60, 80] });
+        avisar(t("¡Es un match!"), { tipo: "festejo", vibrar: [30, 60, 30, 60, 80] });
         navegar(`/matches/${r.match_id}`);
       } else {
-        avisar("💛 Like enviado", { tipo: "ok", vibrar: 15 });
+        avisar("Like enviado", { tipo: "ok", vibrar: 15 });
         cargarHoy();
       }
     } catch (e) {
@@ -53,7 +53,7 @@ export default function Ranking() {
 
       <div className="pestanas" style={{ maxWidth: 340, marginBottom: 16 }}>
         <button className={pestana === "hoy" ? "on" : ""} onClick={() => setPestana("hoy")}>
-          🔥 {t("Los de hoy")}
+          {t("Los de hoy")}
         </button>
         <button className={pestana === "siempre" ? "on" : ""} onClick={() => setPestana("siempre")}>
           {t("Histórico")}
@@ -82,7 +82,7 @@ export default function Ranking() {
                     {p.nombre}, {p.edad}
                   </b>
                   <div style={{ display: "flex", gap: 6, marginTop: 7, flexWrap: "wrap" }}>
-                    <span className="insignia insignia-oro">🔥 {p.likes_hoy} hoy</span>
+                    <span className="insignia insignia-oro">{p.likes_hoy} likes hoy</span>
                     <span className="insignia insignia-comp">{p.compatibilidad}%</span>
                     {p.sintetico && <span className="insignia insignia-sint">Sintético</span>}
                   </div>
@@ -91,7 +91,7 @@ export default function Ranking() {
                     style={{ marginTop: 10 }}
                     onClick={() => likeDesdeHoy(p.id)}
                   >
-                    ♥ Like
+                    Dar like
                   </button>
                 </div>
               </div>

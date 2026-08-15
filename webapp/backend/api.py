@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from matcher import (
     aciegas,
     automatch,
+    boost,
     cruces,
     crushtime,
     demo,
@@ -687,6 +688,19 @@ def correr_automatch(perfil: Perfil = Depends(usuario)):
 # ---------------------------------------------------------------------------
 # Matches y chat
 # ---------------------------------------------------------------------------
+@app.get("/api/boost")
+def boost_estado(perfil: Perfil = Depends(usuario)):
+    return boost.estado(almacen(), perfil)
+
+
+@app.post("/api/boost")
+def boost_activar(perfil: Perfil = Depends(usuario)):
+    try:
+        return boost.activar(almacen(), perfil)
+    except boost.SinBoosts as e:
+        raise SinCupo(str(e), recurso="boost", plan_sugerido="plus") from e
+
+
 @app.get("/api/top-dia")
 def top_del_dia(perfil: Perfil = Depends(usuario)):
     """Los más likeados de HOY, filtrados y listos para dar like."""

@@ -5,6 +5,7 @@ import { api, ErrorApi } from "../api";
 import { useApp } from "../estado";
 import { soloPermitidos } from "../filtroCliente";
 import { avisar } from "../avisos";
+import FestejoMatch from "../componentes/FestejoMatch";
 import {
   IcoCorazon,
   IcoCruz,
@@ -39,7 +40,7 @@ const MOTIVOS_VACIO = {
 const UMBRAL_X = 110;
 const UMBRAL_Y = 130;
 
-function Carta({ tarjeta, fondo, arrastre, onFoto }) {
+function Carta({ tarjeta, fondo, innerRef, onFoto }) {
   const [i, setI] = useState(0);
   const piezas = [...(tarjeta.fotos || []), ...(tarjeta.videos || [])];
   const actual = piezas[Math.min(i, piezas.length - 1)];
@@ -53,15 +54,13 @@ function Carta({ tarjeta, fondo, arrastre, onFoto }) {
     onFoto?.(siguiente);
   };
 
-  const estilo = fondo
-    ? undefined
-    : {
-        transform: `translate(${arrastre.x}px, ${arrastre.y}px) rotate(${arrastre.x * 0.05}deg)`,
-        transition: arrastre.soltando ? "transform .28s ease" : "none",
-      };
-
+  // El transform NO viene por props ni por estado: lo escribe el gesto
+  // directo en el DOM (ver `pintar`). Con `setState` en cada pointermove,
+  // React re-renderizaba el deck entero —las dos cartas, el carrusel, las
+  // insignias— sesenta veces por segundo, y el arrastre iba siempre atrasado
+  // respecto del dedo.
   return (
-    <article className={`carta ${fondo ? "fondo" : ""}`} style={estilo}>
+    <article className={`carta ${fondo ? "fondo" : ""}`} ref={innerRef}>
       {piezas.length > 1 && (
         <div className="carta-pasos">
           {piezas.map((_, k) => (
@@ -83,9 +82,17 @@ function Carta({ tarjeta, fondo, arrastre, onFoto }) {
       )}
       <div className="carta-velo" />
 
-      {!fondo && arrastre.x > 45 && <div className="sello like">Like</div>}
-      {!fondo && arrastre.x < -45 && <div className="sello nope">Nope</div>}
-      {!fondo && arrastre.y < -60 && <div className="sello fan">★ Superfan</div>}
+      {/* Los tres sellos están siempre en el DOM y se revelan con una clase
+          en la carta. Antes se montaban y desmontaban en cada pixel de
+          arrastre: crear y destruir nodos durante un gesto es justo lo que lo
+          hace sentir pegajoso. */}
+      {!fondo && (
+        <>
+          <div className="sello like">Like</div>
+          <div className="sello nope">Nope</div>
+          <div className="sello fan">Superfan</div>
+        </>
+      )}
 
       <div className="carta-datos">
         <div className="carta-nombre">
@@ -116,8 +123,12 @@ function Carta({ tarjeta, fondo, arrastre, onFoto }) {
         </div>
         {tarjeta.bio && <div className="carta-bio">{tarjeta.bio}</div>}
         <div className="carta-insignias">
-          <span className="insignia insignia-comp">
-            <b>{tarjeta.compatibilidad}%</b> compatibles
+          {/* El número solo no se entendía: ahora dice qué mide. */}
+          <span
+            className="insignia insignia-comp"
+            title="Cuánto coinciden tus filtros e intereses con los suyos"
+          >
+            <b>{tarjeta.compatibilidad}%</b> compatible con vos
           </span>
           {tarjeta.es_premium && (
             <span className="insignia insignia-oro">
@@ -144,8 +155,10 @@ export default function Descubrir() {
   const [cargando, setCargando] = useState(true);
   const [match, setMatch] = useState(null);
   const [muro, setMuro] = useState(null);
-  const [arrastre, setArrastre] = useState({ x: 0, y: 0, soltando: false });
-  const inicio = useRef(null);
+  // El gesto vive en refs: nada de esto puede provocar un render mientras el
+  // dedo se mueve.
+  const refCarta = useRef(null);
+  const gesto = useRef({ activo: false, x0: 0, y0: 0, x: 0, y: 0, pedido: 0 });
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -177,8 +190,12 @@ export default function Descubrir() {
     // Se saca la tarjeta de la pila ANTES de esperar la respuesta: si se
     // espera, el pulgar rápido dispara dos veces sobre el mismo perfil y el
     // backend devuelve "ya interactuaste".
-    setTarjetas((t) => t.slice(1));
-    setArrastre({ x: 0, y: 0, soltando: false });
+    // El pedido al servidor sale YA; la carta se quita cuando terminó de
+    // volar. Red y animación en paralelo: el deck nunca "espera" la respuesta.
+    setTimeout(() => {
+      limpiarCarta();
+      setTarjetas((t) => t.slice(1));
+    }, 190);
     // Respuesta táctil: un tic corto en el like, uno doble en el superfan y
     // un patrón en el match. Es la mitad de por qué las apps grandes se
     // sienten "vivas"; sin permiso extra en Android.
@@ -190,8 +207,8 @@ export default function Descubrir() {
         const quedan = r.cupos?.superfans_restantes;
         avisar(
           quedan == null
-            ? "⭐ Superfan enviado"
-            : `⭐ Superfan enviado · te quedan ${quedan} esta semana`,
+            ? "Superfan enviado"
+            : `Superfan enviado · te quedan ${quedan} esta semana`,
           { tipo: "ok" }
         );
       }
@@ -224,27 +241,82 @@ export default function Descubrir() {
   };
 
   // --- arrastre ---
+  //
+  // Todo imperativo y sincronizado con requestAnimationFrame: se acumulan los
+  // pointermove que llegan entre cuadros y se pinta UNA vez por cuadro. En un
+  // teléfono llegan más eventos que cuadros, así que hacer `setState` en cada
+  // uno era trabajo tirado que además atrasaba la carta.
+  const pintar = () => {
+    gesto.current.pedido = 0;
+    const c = refCarta.current;
+    if (!c) return;
+    const { x, y } = gesto.current;
+    c.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${x * 0.055}deg)`;
+    c.classList.toggle("marca-like", x > 45);
+    c.classList.toggle("marca-nope", x < -45);
+    c.classList.toggle("marca-fan", y < -60);
+  };
+
+  const limpiarCarta = () => {
+    const c = refCarta.current;
+    if (!c) return;
+    c.style.transition = "";
+    c.style.transform = "";
+    c.classList.remove("marca-like", "marca-nope", "marca-fan", "volando");
+  };
+
   const bajar = (e) => {
     if (!tarjetas.length) return;
-    inicio.current = { x: e.clientX, y: e.clientY };
+    const g = gesto.current;
+    Object.assign(g, { activo: true, x0: e.clientX, y0: e.clientY, x: 0, y: 0 });
+    if (refCarta.current) refCarta.current.style.transition = "none";
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
+
   const mover = (e) => {
-    if (!inicio.current) return;
-    setArrastre({
-      x: e.clientX - inicio.current.x,
-      y: e.clientY - inicio.current.y,
-      soltando: false,
-    });
+    const g = gesto.current;
+    if (!g.activo) return;
+    g.x = e.clientX - g.x0;
+    g.y = e.clientY - g.y0;
+    if (!g.pedido) g.pedido = requestAnimationFrame(pintar);
   };
+
   const soltar = () => {
-    if (!inicio.current) return;
-    inicio.current = null;
-    const { x, y } = arrastre;
-    if (y < -UMBRAL_Y) decidir("superfan");
-    else if (x > UMBRAL_X) decidir("like");
-    else if (x < -UMBRAL_X) decidir("pass");
-    else setArrastre({ x: 0, y: 0, soltando: true });
+    const g = gesto.current;
+    if (!g.activo) return;
+    g.activo = false;
+    if (g.pedido) {
+      cancelAnimationFrame(g.pedido);
+      g.pedido = 0;
+    }
+    const { x, y } = g;
+    const c = refCarta.current;
+    const tipo =
+      y < -UMBRAL_Y ? "superfan" : x > UMBRAL_X ? "like" : x < -UMBRAL_X ? "pass" : null;
+
+    if (!tipo) {
+      // Vuelve al centro con resorte. La transición la corre el compositor,
+      // no el hilo principal.
+      if (c) {
+        c.style.transition = "transform .34s var(--resorte)";
+        c.style.transform = "";
+        c.classList.remove("marca-like", "marca-nope", "marca-fan");
+      }
+      return;
+    }
+
+    // La carta SALE VOLANDO hacia donde la mandó el dedo. Sin esto se
+    // esfumaba de golpe y el swipe se sentía barato: el vuelo es lo que le
+    // da peso a la decisión.
+    if (c) {
+      const salidaX =
+        tipo === "pass" ? -window.innerWidth : tipo === "like" ? window.innerWidth : x * 3;
+      const salidaY = tipo === "superfan" ? -window.innerHeight : y * 1.4 + 60;
+      c.style.transition = "transform .3s cubic-bezier(.3,0,.4,1), opacity .3s ease";
+      c.style.transform = `translate3d(${salidaX}px, ${salidaY}px, 0) rotate(${x * 0.09}deg)`;
+      c.classList.add("volando");
+    }
+    decidir(tipo);
   };
 
   const actual = tarjetas[0];
@@ -295,8 +367,8 @@ export default function Descubrir() {
                 )}
               </div>
             )}
-            {siguiente && <Carta tarjeta={siguiente} fondo arrastre={arrastre} />}
-            {actual && <Carta tarjeta={actual} arrastre={arrastre} />}
+            {siguiente && <Carta key={siguiente.id} tarjeta={siguiente} fondo />}
+            {actual && <Carta key={actual.id} tarjeta={actual} innerRef={refCarta} />}
           </div>
 
           {actual && (
@@ -396,38 +468,13 @@ export default function Descubrir() {
       </div>
 
       {match && (
-        <div className="velo-modal" onClick={() => setMatch(null)}>
-          {/* Lluvia de corazones en CSS puro: el festejo es la mitad del rito
-              del match en toda la categoría. 14 partículas alcanzan; más es
-              ruido y en un teléfono viejo tironea. */}
-          <div className="confeti" aria-hidden="true">
-            {Array.from({ length: 14 }, (_, i) => (
-              <span key={i} style={{ "--i": i }}>{i % 3 ? "💛" : "💘"}</span>
-            ))}
-          </div>
-          <div className="modal modal-festejo" onClick={(e) => e.stopPropagation()}>
-            <h2>¡Es un match!</h2>
-            <p style={{ color: "var(--muted)", margin: 0 }}>
-              {match.automatico
-                ? `El algoritmo emparejó con ${match.con.nombre} (${match.compatibilidad}% compatibles). Ninguno de los dos deslizó.`
-                : `A ${match.con.nombre} también le gustaste.`}
-            </p>
-            <div className="modal-caras">
-              <img src={match.con.fotos?.[0]?.url} alt="" />
-            </div>
-            <div style={{ display: "flex", gap: 9 }}>
-              <button className="btn btn-bloque" onClick={() => setMatch(null)}>
-                Seguir deslizando
-              </button>
-              <button
-                className="btn btn-primario btn-bloque"
-                onClick={() => navegar(`/matches/${match.match_id}`)}
-              >
-                Mandar mensaje
-              </button>
-            </div>
-          </div>
-        </div>
+        <FestejoMatch
+          con={match.con}
+          compatibilidad={match.compatibilidad}
+          automatico={match.automatico}
+          onSeguir={() => setMatch(null)}
+          onChat={() => navegar(`/matches/${match.match_id}`)}
+        />
       )}
 
       {muro && (

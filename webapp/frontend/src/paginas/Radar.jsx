@@ -179,6 +179,10 @@ export default function Radar() {
                 anillosKm={anillos}
                 seleccion={seleccion}
                 onElegir={setSeleccion}
+                onLike={(id) => {
+                  setSeleccion(null);
+                  like(id);
+                }}
               />
             )}
 
@@ -273,7 +277,7 @@ export default function Radar() {
                 )}
               </div>
               <button className="btn btn-primario btn-bloque" onClick={() => like(seleccion.id)}>
-                ♥ Like
+                Dar like
               </button>
             </div>
           )}

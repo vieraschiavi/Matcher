@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
+import { IcoAntifaz } from "../Iconos";
 
 // Avatar de la lista y la cabecera. En una cita a ciegas sin revelar el
 // servidor manda `fotos: []` (regla 8: no viaja lo que no se puede ver), así
@@ -11,7 +12,7 @@ function Avatar({ con, tam = 48 }) {
   if (url) return <img src={url} alt="" style={{ width: tam, height: tam, borderRadius: "50%", objectFit: "cover" }} />;
   return (
     <span className="silueta" style={{ width: tam, height: tam }} aria-label="Perfil sin revelar">
-      🎭
+      <IcoAntifaz tam={Math.round(tam * 0.55)} />
     </span>
   );
 }
@@ -106,9 +107,15 @@ export default function Chat() {
           fuera de pantalla y la página parecía rota. */}
       <div className="deck-zona zona-chat">
         <div className="panel">
-          <button className="btn btn-ciegas btn-bloque" onClick={pedirCiegas}>
-            🎭 {t("Cita a ciegas")}
-            <span>{t("Primero la charla, después las caras")}</span>
+          {/* Tarjeta grande y no un botón más de la lista: pasaba
+              desapercibida entre las conversaciones y es EL diferencial. */}
+          <button className="tarjeta-ciegas" onClick={pedirCiegas}>
+            <span className="tarjeta-ciegas-icono"><IcoAntifaz tam={26} /></span>
+            <span className="tarjeta-ciegas-texto">
+              <b>{t("Cita a ciegas")}</b>
+              <span>{t("Primero la charla, después las caras")}</span>
+            </span>
+            <span className="tarjeta-ciegas-cta">{t("Jugar")}</span>
           </button>
           {avisoCiegas && (
             <div className="aviso aviso-info" style={{ margin: "10px 0" }}>{avisoCiegas}</div>
@@ -124,7 +131,7 @@ export default function Chat() {
                 <Avatar con={m.con} tam={44} />
                 <div className="chat-cuerpo">
                   <b>
-                    {m.con.nombre}, {m.con.edad} {m.ciego && !m.ciego.revelado && "🎭"}
+                    {m.con.nombre}, {m.con.edad}
                   </b>
                   <span>
                     {m.ultimo_mensaje
@@ -164,13 +171,15 @@ export default function Chat() {
                   <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
                     <span className="insignia insignia-comp">{activo.compatibilidad}%</span>
                     {activo.ciego && !activo.ciego.revelado && (
-                      <span className="insignia insignia-oro">🎭 {t("Cita a ciegas")}</span>
+                      <span className="insignia insignia-oro">
+                        <IcoAntifaz tam={12} /> {t("Cita a ciegas")}
+                      </span>
                     )}
                     {activo.ciego?.revelado && (
-                      <span className="insignia insignia-auto">🎉 {t("Revelado")}</span>
+                      <span className="insignia insignia-auto">{t("Revelado")}</span>
                     )}
                     {activo.automatico && (
-                      <span className="insignia insignia-auto">⚡ Match automático</span>
+                      <span className="insignia insignia-auto">Match automático</span>
                     )}
                     {activo.con.sintetico && (
                       <span className="insignia insignia-sint">Sintético</span>

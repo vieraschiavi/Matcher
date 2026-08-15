@@ -162,3 +162,32 @@ export const IcoCamara = (p) => (
     <circle cx="12" cy="13" r="3.3" />
   </Svg>
 );
+
+// --- íconos que faltaban para las secciones nuevas -------------------------
+// Estos existen porque las pantallas nuevas (Crush Time, cita a ciegas, boost)
+// habían salido con emoji, contra lo que dice el comentario de arriba: el
+// emoji lo dibuja el sistema, cambia entre teléfonos y no toma el color del
+// tema. Mismo trazo y misma grilla que el resto del set.
+
+export const IcoDiana = (p) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <circle cx="12" cy="12" r="4.6" />
+    <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+  </Svg>
+);
+
+// Antifaz de baile de máscaras: la cita a ciegas.
+export const IcoAntifaz = (p) => (
+  <Svg {...p}>
+    <path d="M3.2 9.4c2.6-1 5.4-1.2 8.8-1.2s6.2.2 8.8 1.2c.3 3.2-1 5.6-3.1 6.3-1.8.6-3.6-.3-4.7-1.9-.4-.6-1.2-.6-1.6 0-1.1 1.6-2.9 2.5-4.7 1.9-2.1-.7-3.4-3.1-3.1-6.3Z" />
+    <path d="M8.6 11.4h1.2M14.2 11.4h1.2" />
+  </Svg>
+);
+
+// Rayo: el boost.
+export const IcoRayo2 = ({ relleno = false, ...p }) => (
+  <Svg {...p}>
+    <path d="M13.2 2.5 5.6 13.1h5.1l-.9 8.4 7.6-10.6h-5.1Z" fill={relleno ? "currentColor" : "none"} />
+  </Svg>
+);

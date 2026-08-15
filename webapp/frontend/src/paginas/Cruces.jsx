@@ -70,7 +70,7 @@ export default function Cruces() {
                 <span className="insignia insignia-comp">{p.compatibilidad}%</span>
               </div>
               <button className="btn btn-primario btn-bloque" onClick={() => like(p.id)}>
-                ♥ Like
+                Dar like
               </button>
             </div>
           </div>

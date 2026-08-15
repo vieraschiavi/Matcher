@@ -21,7 +21,7 @@ from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import filtros, planes, scoring, seguridad
+from . import boost, filtros, planes, scoring, seguridad
 from .modelos import (
     DatosInvalidos,
     Match,
@@ -93,6 +93,16 @@ CREATE TABLE IF NOT EXISTS tokens_revocados (
     token   TEXT PRIMARY KEY,
     momento TEXT NOT NULL
 );
+-- Boost: media hora arriba del deck. Se guarda el inicio y el mes; que esté
+-- "activo" se deduce del vencimiento, no de un flag (un flag hay que apagarlo
+-- con un job, y sin job queda prendido para siempre).
+CREATE TABLE IF NOT EXISTS boosts (
+    id         TEXT PRIMARY KEY,
+    usuario_id TEXT NOT NULL,
+    mes        TEXT NOT NULL,
+    inicio     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_boost_mes ON boosts(usuario_id, mes);
 -- Crush Time: rondas del juego de adivinar quién te dio like. La fecha va
 -- aparte del momento porque el cupo es POR DÍA y contar por fecha es un
 -- índice simple; parsear timestamps para eso es buscarse un bug de huso.
@@ -610,7 +620,21 @@ class Almacen:
         universo = [p for p in self.todos() if p.id != perfil.id]
         vistos = self.vistos_por(perfil.id)
         elegibles = filtros.candidatos(perfil, universo, vistos=vistos)
-        puntuados = scoring.ordenar_deck(perfil, elegibles, ahora=ahora)[:limite]
+        # El boost de quien está impulsado ahora multiplica su puntaje. Se
+        # aplica DESPUÉS de `ordenar_deck` sobre el puntaje sin ola y se
+        # reordena dentro de cada ola: así el boost sube a alguien en TU zona
+        # pero no lo trae de otro continente (regla 3, la ola manda).
+        puntuados = scoring.ordenar_deck(perfil, elegibles, ahora=ahora)
+        impulsados = {
+            f["id"] for f in puntuados if boost.activo(self, f["id"], ahora)
+        }
+        if impulsados:
+            for f in puntuados:
+                if f["id"] in impulsados:
+                    f["puntaje_sin_ola"] = round(f["puntaje_sin_ola"] * boost.MULTIPLICADOR, 2)
+                    f["impulsado"] = True
+            puntuados.sort(key=lambda d: (d["orden_ola"], -d["puntaje_sin_ola"], d["id"]))
+        puntuados = puntuados[:limite]
         por_id = {p.id: p for p in elegibles}
         tarjetas = []
         for fila in puntuados:

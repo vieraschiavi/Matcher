@@ -3,6 +3,8 @@ import { t } from "../i18n";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../estado";
+import { avisar } from "../avisos";
+import { IcoRayo2 } from "../Iconos";
 
 export default function Planes() {
   const { perfil, refrescar } = useApp();
@@ -13,12 +15,15 @@ export default function Planes() {
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [historial, setHistorial] = useState([]);
+  const [boost, setBoost] = useState(null);
+  const [restan, setRestan] = useState(0);
 
   useEffect(() => {
     // El catálogo de planes es público; el historial no. Si falla el
     // historial la pantalla igual tiene que mostrarse: antes cualquiera de
     // los dos la dejaba en "Cargando planes…" y no se podía ni ver el precio.
     api.planes().then(setCatalogo).catch((e) => setError(e.message));
+    api.boost().then(setBoost).catch(() => setBoost(null));
     api.historialPagos().then((r) => setHistorial(r.pagos)).catch(() => setHistorial([]));
   }, [perfil?.plan]);
 
@@ -60,6 +65,31 @@ export default function Planes() {
     }
   };
 
+  // Cuenta regresiva del boost en curso. Un boost que no se ve correr es
+  // plata tirada: es la queja número uno del feature en las otras apps.
+  useEffect(() => {
+    if (!boost?.en_curso) return;
+    setRestan(boost.en_curso.segundos_restantes);
+    const id = setInterval(() => setRestan((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [boost]);
+
+  const activarBoost = async () => {
+    setError("");
+    try {
+      const r = await api.activarBoost();
+      setBoost(r);
+      if (!r.ya_estaba) {
+        avisar(`Boost activado · ${r.duracion_min} minutos arriba del deck`, {
+          tipo: "festejo",
+          vibrar: [20, 40, 20],
+        });
+      }
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   const cancelar = async () => {
     setError("");
     try {
@@ -92,6 +122,31 @@ export default function Planes() {
         Todos los filtros están en el plan gratis. Lo que se paga es volumen y visibilidad, no el
         derecho a filtrar por lo que te importa.
       </p>
+
+      {/* El boost estaba en la lista de beneficios pero no se podía accionar
+          desde ningún lado. Va acá arriba, con el cupo y el reloj a la vista. */}
+      {boost && (
+        <div className={`panel panel-boost ${boost.en_curso ? "corriendo" : ""}`}>
+          <span className="boost-icono"><IcoRayo2 tam={26} relleno={!!boost.en_curso} /></span>
+          <div className="boost-texto">
+            <b>Boost</b>
+            <span>
+              {boost.en_curso
+                ? `Corriendo · ${Math.floor(restan / 60)}:${String(restan % 60).padStart(2, "0")} restantes`
+                : boost.maximo_mes === 0
+                  ? "Los planes pagos incluyen boosts: media hora arriba del deck de tu zona."
+                  : `${boost.restantes} de ${boost.maximo_mes} disponibles este mes · ${boost.duracion_min} min cada uno`}
+            </span>
+          </div>
+          <button
+            className="btn btn-primario"
+            onClick={activarBoost}
+            disabled={!!boost.en_curso || boost.restantes === 0}
+          >
+            {boost.en_curso ? "En curso" : boost.maximo_mes === 0 ? "Ver planes" : "Activar"}
+          </button>
+        </div>
+      )}
 
       <div className="pestanas" style={{ maxWidth: 300 }}>
         <button className={periodo === "mensual" ? "on" : ""} onClick={() => setPeriodo("mensual")}>

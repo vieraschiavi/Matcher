@@ -126,6 +126,8 @@ export const api = {
 
   citaACiegas: () => pedir("/aciegas", { metodo: "POST" }),
   topDia: () => pedir("/top-dia"),
+  boost: () => pedir("/boost"),
+  activarBoost: () => pedir("/boost", { metodo: "POST" }),
   crushtime: () => pedir("/crushtime"),
   crushtimeRonda: () => pedir("/crushtime/ronda", { metodo: "POST" }),
   crushtimeAdivinar: (ronda, elegido) =>

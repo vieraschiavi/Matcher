@@ -430,7 +430,7 @@ function DisponibleHoy({ perfil, refrescar }) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6 }}>
-        <span style={{ fontWeight: 800 }}>⚡ Disponible hoy</span>
+        <span style={{ fontWeight: 800 }}>Disponible hoy</span>
         {activo && <span className="insignia insignia-comp">Activo</span>}
       </div>
       <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "0 0 10px" }}>

@@ -4,6 +4,7 @@ import { api, ErrorApi } from "../api";
 import { avisar } from "../avisos";
 import { useApp } from "../estado";
 import { t } from "../i18n";
+import { IcoCorazon, IcoDiana } from "../Iconos";
 
 // Crush Time: cuatro caras, una te dio like, adiviná cuál.
 //
@@ -46,7 +47,7 @@ export default function CrushTime() {
       const r = await api.crushtimeAdivinar(ronda.ronda, id);
       setResultado(r);
       if (r.acierto) {
-        avisar(t("🎯 ¡Acertaste! Es un match"), { tipo: "festejo", vibrar: [30, 60, 30, 60, 80] });
+        avisar(t("¡Acertaste! Es un match"), { tipo: "festejo", vibrar: [30, 60, 30, 60, 80] });
       } else {
         try { navigator.vibrate?.(60); } catch { /* sin vibrador */ }
       }
@@ -79,7 +80,7 @@ export default function CrushTime() {
 
       {!ronda && (
         <div className="panel crush-portada">
-          <span className="crush-emoji">🎯</span>
+          <span className="crush-icono"><IcoDiana tam={40} /></span>
           <h3>{t("¿Quién te dio like?")}</h3>
           <p>
             {t("Siempre hay al menos una persona que te dio like en la ronda. Errar no la revela: seguí jugando.")}
@@ -117,8 +118,8 @@ export default function CrushTime() {
                 <div className="crush-nombre">
                   {c.nombre}, {c.edad}
                 </div>
-                {acierto && <span className="crush-sello">💘</span>}
-                {error && <span className="crush-sello">😅</span>}
+                {acierto && <span className="crush-sello acierto"><IcoCorazon tam={26} relleno /></span>}
+                {error && <span className="crush-sello error">✕</span>}
               </button>
             );
           })}
@@ -129,7 +130,7 @@ export default function CrushTime() {
         <div className="panel crush-resultado">
           {resultado.acierto ? (
             <>
-              <h3>{t("¡Acertaste! Es un match")} 🎉</h3>
+              <h3>{t("¡Acertaste! Es un match")}</h3>
               <div style={{ display: "flex", gap: 9, marginTop: 10 }}>
                 <button className="btn btn-bloque" onClick={cerrarRonda}>
                   {t("Otra ronda")}
@@ -144,7 +145,7 @@ export default function CrushTime() {
             </>
           ) : (
             <>
-              <h3>{t("No era 😅")}</h3>
+              <h3>{t("No era")}</h3>
               <p style={{ color: "var(--muted)", margin: "4px 0 10px" }}>
                 {t("No te decimos quién fue: su like sigue pendiente y puede volver a aparecer.")}{" "}
                 {estado && `${t("Turnos de hoy")}: ${estado.turnos_restantes}/${estado.turnos_max}.`}

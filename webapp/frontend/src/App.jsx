@@ -10,7 +10,7 @@ import {
   IcoChat,
   IcoCorazon,
   IcoDiamante,
-  IcoEstrella,
+  IcoDiana,
   IcoFiltros,
   IcoLlama,
   IcoPersona,
@@ -49,7 +49,7 @@ const MENU = [
   // El juego va en la barra de abajo y "Mi perfil" sube a la de arriba: la
   // barra inferior es para lo que se abre todos los días, y el perfil se
   // edita una vez por semana.
-  { a: "/crush", Icono: IcoEstrella, texto: "Crush Time", corta: "Crush", principal: true },
+  { a: "/crush", Icono: IcoDiana, texto: "Crush Time", corta: "Crush", principal: true },
   { a: "/perfil", Icono: IcoPersona, texto: "Mi perfil", corta: "Perfil" },
   { a: "/ranking", Icono: IcoTrofeo, texto: "Más votados", corta: "Top" },
   { a: "/filtros", Icono: IcoFiltros, texto: "Filtros", corta: "Filtros" },
@@ -228,12 +228,12 @@ function Likes() {
               </b>
               <div style={{ display: "flex", gap: 6, marginTop: 7, flexWrap: "wrap" }}>
                 <span className="insignia insignia-comp">{p.compatibilidad}%</span>
-                {p.tipo === "superfan" && <span className="insignia insignia-oro">⭐ Superfan</span>}
+                {p.tipo === "superfan" && <span className="insignia insignia-oro">Superfan</span>}
                 {p.sintetico && <span className="insignia insignia-sint">Sintético</span>}
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button className="btn btn-primario" style={{ flex: 1 }} onClick={() => responder(p.id, "like")}>
-                  ♥ {t("Responder like")}
+                  {t("Responder like")}
                 </button>
                 <button className="btn" onClick={() => responder(p.id, "pass")} aria-label="Pasar">
                   ✕
@@ -265,7 +265,7 @@ export default function App() {
         setGlobos(() => {
           const likes = l.cantidad || 0;
           if (likesVistos.current != null && likes > likesVistos.current) {
-            avisar(t("💛 ¡Alguien te dio like! Mirá quién puede ser en Crush Time"), {
+            avisar(t("¡Alguien te dio like! Mirá quién puede ser en Crush Time"), {
               tipo: "festejo",
               vibrar: [25, 50, 25],
             });

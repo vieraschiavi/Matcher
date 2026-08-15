@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { IcoCorazon } from "../Iconos";
 import { t } from "../i18n";
 
 // Mapa de verdad: dónde está la gente que el radar encontró.
@@ -48,6 +49,7 @@ export default function Mapa({
   anillosKm = [],
   seleccion,
   onElegir,
+  onLike,
   alto = 420,
 }) {
   const caja = useRef(null);
@@ -202,6 +204,30 @@ export default function Mapa({
               </button>
             );
           })}
+
+      {/* Tocar un pin abre esta tarjeta con el botón de like: antes había que
+          bajar a la lista para likear a alguien que veías en el mapa. */}
+      {vista && seleccion && (() => {
+        const pos = vista.aPixel(seleccion.lat_aprox, seleccion.lon_aprox);
+        const izq = Math.min(Math.max(pos.x - 86, 6), Math.max(ancho - 178, 6));
+        const arriba = pos.y > alto / 2 ? pos.y - 132 : pos.y + 26;
+        return (
+          <div className="mapa-globo" style={{ left: izq, top: Math.max(6, arriba) }}>
+            <img src={seleccion.fotos?.[0]?.url} alt="" />
+            <div className="mapa-globo-datos">
+              <b>{seleccion.nombre}, {seleccion.edad}</b>
+              <span>{seleccion.distancia_km} km · {seleccion.compatibilidad}%</span>
+            </div>
+            <button
+              className="mapa-globo-like"
+              onClick={() => onLike?.(seleccion.id)}
+              aria-label={`Me gusta ${seleccion.nombre}`}
+            >
+              <IcoCorazon tam={18} relleno />
+            </button>
+          </div>
+        );
+      })()}
 
       <div className="mapa-pie">
         {sinTiles ? t("Mapa sin conexión · posiciones reales") : ATRIBUCION}
