@@ -33,6 +33,10 @@ class Limites:
     filtros_avanzados: int | None      # cuántos de altura/política/equipo puede usar
     automatch_por_dia: int
     boost_por_mes: int
+    # Turnos diarios de Crush Time (adivinar quién te dio like). El juego
+    # existe en el plan gratis —probarlo es lo que lo hace deseable— y el
+    # pago compra volumen, igual que con los likes.
+    crushtime_por_dia: int
     modo_incognito: bool
     sin_publicidad: bool
     fotos: int
@@ -69,6 +73,7 @@ class Plan:
                 "filtros_avanzados": self.limites.filtros_avanzados,
                 "automatch_por_dia": self.limites.automatch_por_dia,
                 "boost_por_mes": self.limites.boost_por_mes,
+                "crushtime_por_dia": self.limites.crushtime_por_dia,
                 "modo_incognito": self.limites.modo_incognito,
                 "sin_publicidad": self.limites.sin_publicidad,
                 "fotos": self.limites.fotos,
@@ -91,6 +96,7 @@ PLANES: dict[str, Plan] = {
             filtros_avanzados=None,    # <- TODOS los filtros, gratis. Es el diferencial.
             automatch_por_dia=1,
             boost_por_mes=0,
+            crushtime_por_dia=1,
             modo_incognito=False,
             sin_publicidad=False,
             fotos=10,
@@ -117,6 +123,7 @@ PLANES: dict[str, Plan] = {
             filtros_avanzados=None,
             automatch_por_dia=5,
             boost_por_mes=1,
+            crushtime_por_dia=5,
             modo_incognito=False,
             sin_publicidad=True,
             fotos=10,
@@ -128,6 +135,7 @@ PLANES: dict[str, Plan] = {
             "5 superfans por semana",
             "Rebobinar el último descarte",
             "5 matches automáticos por día",
+            "5 turnos de Crush Time por día",
             "1 boost por mes · sin publicidad",
         ],
     ),
@@ -144,6 +152,7 @@ PLANES: dict[str, Plan] = {
             filtros_avanzados=None,
             automatch_por_dia=15,
             boost_por_mes=4,
+            crushtime_por_dia=5,
             modo_incognito=True,
             sin_publicidad=True,
             fotos=10,

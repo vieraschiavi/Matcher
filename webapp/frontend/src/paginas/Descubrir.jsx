@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
 import { useApp } from "../estado";
 import { soloPermitidos } from "../filtroCliente";
+import { avisar } from "../avisos";
 import {
   IcoCorazon,
   IcoCruz,
@@ -185,6 +186,15 @@ export default function Descubrir() {
     try {
       const r = await api.interactuar(actual.id, tipo);
       setCupos(r.cupos);
+      if (tipo === "superfan" && !r.match) {
+        const quedan = r.cupos?.superfans_restantes;
+        avisar(
+          quedan == null
+            ? "⭐ Superfan enviado"
+            : `⭐ Superfan enviado · te quedan ${quedan} esta semana`,
+          { tipo: "ok" }
+        );
+      }
       if (r.match) {
         try { navigator.vibrate?.([30, 60, 30, 60, 80]); } catch { /* sin vibrador */ }
         setMatch({ ...r, con: r.con });
@@ -387,7 +397,15 @@ export default function Descubrir() {
 
       {match && (
         <div className="velo-modal" onClick={() => setMatch(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          {/* Lluvia de corazones en CSS puro: el festejo es la mitad del rito
+              del match en toda la categoría. 14 partículas alcanzan; más es
+              ruido y en un teléfono viejo tironea. */}
+          <div className="confeti" aria-hidden="true">
+            {Array.from({ length: 14 }, (_, i) => (
+              <span key={i} style={{ "--i": i }}>{i % 3 ? "💛" : "💘"}</span>
+            ))}
+          </div>
+          <div className="modal modal-festejo" onClick={(e) => e.stopPropagation()}>
             <h2>¡Es un match!</h2>
             <p style={{ color: "var(--muted)", margin: 0 }}>
               {match.automatico

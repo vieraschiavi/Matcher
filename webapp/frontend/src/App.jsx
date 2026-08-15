@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Logo from "./Logo";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
 import { useApp } from "./estado";
 import { soloPermitidos } from "./filtroCliente";
+import { alAvisar, avisar } from "./avisos";
 import { t } from "./i18n";
 import {
   IcoChat,
   IcoCorazon,
   IcoDiamante,
+  IcoEstrella,
   IcoFiltros,
   IcoLlama,
   IcoPersona,
@@ -19,6 +21,7 @@ import {
 import Chat from "./paginas/Chat";
 import Completar from "./paginas/Completar";
 import Cruces from "./paginas/Cruces";
+import CrushTime from "./paginas/CrushTime";
 import Descubrir from "./paginas/Descubrir";
 import Entrar from "./paginas/Entrar";
 import Filtros from "./paginas/Filtros";
@@ -43,7 +46,11 @@ const MENU = [
   { a: "/radar", Icono: IcoRadar, texto: "Radar", corta: "Radar", principal: true },
   { a: "/matches", Icono: IcoChat, texto: "Matches", corta: "Chats", globo: "matches", principal: true },
   { a: "/likes", Icono: IcoCorazon, texto: "Te gustaron", corta: "Likes", globo: "likes", principal: true },
-  { a: "/perfil", Icono: IcoPersona, texto: "Mi perfil", corta: "Perfil", principal: true },
+  // El juego va en la barra de abajo y "Mi perfil" sube a la de arriba: la
+  // barra inferior es para lo que se abre todos los días, y el perfil se
+  // edita una vez por semana.
+  { a: "/crush", Icono: IcoEstrella, texto: "Crush Time", corta: "Crush", principal: true },
+  { a: "/perfil", Icono: IcoPersona, texto: "Mi perfil", corta: "Perfil" },
   { a: "/ranking", Icono: IcoTrofeo, texto: "Más votados", corta: "Top" },
   { a: "/filtros", Icono: IcoFiltros, texto: "Filtros", corta: "Filtros" },
   { a: "/planes", Icono: IcoDiamante, texto: "Planes", corta: "Planes" },
@@ -126,6 +133,30 @@ function BarraSuperior() {
         ))}
       </div>
     </header>
+  );
+}
+
+// Avisos flotantes. Uno solo por vez y se va solo: una pila de toasts
+// apilados es ruido, no información.
+function Avisos() {
+  const [aviso, setAviso] = useState(null);
+  useEffect(() => {
+    let timer;
+    const parar = alAvisar((a) => {
+      setAviso(a);
+      clearTimeout(timer);
+      timer = setTimeout(() => setAviso(null), a.tipo === "festejo" ? 3800 : 2600);
+    });
+    return () => {
+      parar();
+      clearTimeout(timer);
+    };
+  }, []);
+  if (!aviso) return null;
+  return (
+    <div className={`toast toast-${aviso.tipo}`} key={aviso.id} role="status">
+      {aviso.texto}
+    </div>
   );
 }
 
@@ -220,6 +251,10 @@ export default function App() {
   const { perfil, cargando, lang } = useApp();
   const [globos, setGlobos] = useState({ matches: 0, likes: 0 });
   const ubicacion = useLocation();
+  // El último conteo de likes visto, para festejar SOLO cuando sube. Arranca
+  // en null: la primera lectura no es un like nuevo, es el estado inicial —
+  // sin esto la app festejaba al abrirse, que es mentirle al usuario.
+  const likesVistos = useRef(null);
 
   // Se recuenta al cambiar de pantalla y no con un temporizador: en el APK un
   // polling de fondo vacía la batería y no aporta nada en una demo.
@@ -227,9 +262,16 @@ export default function App() {
     if (!perfil) return;
     Promise.all([api.matches(), api.likesRecibidos()])
       .then(([m, l]) =>
-        setGlobos({
-          matches: m.matches.reduce((s, x) => s + x.sin_leer, 0),
-          likes: l.cantidad || 0,
+        setGlobos(() => {
+          const likes = l.cantidad || 0;
+          if (likesVistos.current != null && likes > likesVistos.current) {
+            avisar(t("💛 ¡Alguien te dio like! Mirá quién puede ser en Crush Time"), {
+              tipo: "festejo",
+              vibrar: [25, 50, 25],
+            });
+          }
+          likesVistos.current = likes;
+          return { matches: m.matches.reduce((s, x) => s + x.sin_leer, 0), likes };
         })
       )
       .catch(() => {});
@@ -259,6 +301,7 @@ export default function App() {
 
   return (
     <div className="layout" key={lang}>
+      <Avisos />
       <Barra globos={globos} />
       <BarraSuperior />
       <main className="main">
@@ -270,6 +313,7 @@ export default function App() {
           <Route path="/likes" element={<Likes />} />
           <Route path="/radar" element={<Radar />} />
           <Route path="/cruces" element={<Cruces />} />
+          <Route path="/crush" element={<CrushTime />} />
           <Route path="/ranking" element={<Ranking />} />
           <Route path="/filtros" element={<Filtros />} />
           <Route path="/perfil" element={<MiPerfil />} />

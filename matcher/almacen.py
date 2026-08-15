@@ -93,6 +93,19 @@ CREATE TABLE IF NOT EXISTS tokens_revocados (
     token   TEXT PRIMARY KEY,
     momento TEXT NOT NULL
 );
+-- Crush Time: rondas del juego de adivinar quién te dio like. La fecha va
+-- aparte del momento porque el cupo es POR DÍA y contar por fecha es un
+-- índice simple; parsear timestamps para eso es buscarse un bug de huso.
+CREATE TABLE IF NOT EXISTS crushtime (
+    id          TEXT PRIMARY KEY,
+    usuario_id  TEXT NOT NULL,
+    fecha       TEXT NOT NULL,
+    objetivo_id TEXT NOT NULL,
+    opciones    TEXT NOT NULL,
+    resuelto    INTEGER NOT NULL DEFAULT 0,
+    momento     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_crush_dia ON crushtime(usuario_id, fecha);
 CREATE TABLE IF NOT EXISTS reportes (
     id         TEXT PRIMARY KEY,
     de_id      TEXT NOT NULL,
@@ -763,6 +776,36 @@ class Almacen:
             for f, otro in visibles
         ]
         return {"visible": True, "cantidad": len(perfiles), "perfiles": perfiles}
+
+    def top_del_dia(self, perfil: Perfil, limite: int = 12) -> list[dict]:
+        """Los más likeados HOY que pasan tus filtros y a los que todavía no
+        les respondiste — es una lista para dar like, no una vitrina.
+
+        Distinto de "más votados": aquél es histórico y suavizado; éste es el
+        pulso del día, crudo, y por eso engancha — cambia todos los días.
+        """
+        desde = datetime.utcnow().date().isoformat()
+        filas = self.con.execute(
+            "SELECT a_id, COUNT(*) c FROM interacciones "
+            "WHERE tipo IN ('like','superfan') AND momento >= ? "
+            "GROUP BY a_id ORDER BY c DESC",
+            (desde,),
+        ).fetchall()
+        vistos = self.vistos_por(perfil.id)
+        salida = []
+        for f in filas:
+            if f["a_id"] == perfil.id or f["a_id"] in vistos:
+                continue
+            otro = self.perfil(f["a_id"])
+            if not otro or not otro.activo or not otro.completo:
+                continue
+            if not filtros.pasa_filtros(perfil, otro, reciproco=False)[0]:
+                continue
+            comp, _ = scoring.compatibilidad(perfil, otro)
+            salida.append(otro.a_dict() | {"likes_hoy": f["c"], "compatibilidad": comp})
+            if len(salida) >= limite:
+                break
+        return salida
 
     # ------------------------------------------------------------------
     # Matches y chat

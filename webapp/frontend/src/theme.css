@@ -216,6 +216,85 @@ button { font-family: inherit; }
 .radar-punto-borde { fill: none; stroke: #fff; stroke-width: 2; }
 .radar-punto-cruce { fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 3 3; }
 
+/* ---- avisos flotantes y festejos ---- */
+.toast {
+  position: fixed; left: 50%; top: 14px; transform: translateX(-50%);
+  z-index: 90; max-width: min(92vw, 420px); padding: 11px 18px;
+  border-radius: 999px; font-size: 13.5px; font-weight: 600; text-align: center;
+  background: var(--navy-800); color: var(--ink); border: 1px solid var(--line);
+  box-shadow: var(--sombra-3); animation: toast-entra .25s var(--resorte) both;
+}
+.toast-festejo {
+  background: linear-gradient(120deg, var(--coral-deep), var(--violeta));
+  border-color: transparent;
+}
+.toast-ok { border-color: var(--green); }
+@keyframes toast-entra {
+  from { opacity: 0; transform: translate(-50%, -16px) scale(.92); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+/* Lluvia de corazones del match. Cada partícula cae con un desfase y una
+   deriva horizontal distintos, derivados de --i: parece azar sin JS. */
+.confeti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.confeti span {
+  position: absolute; top: -6vh;
+  left: calc((var(--i) * 7.3%) + 2%);
+  font-size: calc(16px + (var(--i) * 1.3px));
+  animation: confeti-cae calc(2.2s + var(--i) * .17s) ease-in calc(var(--i) * .12s) infinite;
+  opacity: 0;
+}
+@keyframes confeti-cae {
+  0% { opacity: 0; transform: translateY(0) rotate(0); }
+  8% { opacity: 1; }
+  100% { opacity: .9; transform: translateY(108vh) rotate(200deg); }
+}
+.modal-festejo { animation: modal-salta .45s var(--resorte) both; }
+@keyframes modal-salta {
+  from { transform: scale(.7); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ---- Crush Time ---- */
+.crush-portada { text-align: center; padding: 26px 20px; max-width: 430px; }
+.crush-portada .crush-emoji { font-size: 44px; display: block; margin-bottom: 6px; }
+.crush-portada p { color: var(--muted); font-size: 13.5px; }
+.crush-agotado { margin-top: 10px; font-size: 12.5px; color: var(--faint); }
+.crush-grilla {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px; max-width: 480px;
+}
+.crush-carta {
+  position: relative; padding: 0; border: 2px solid var(--line);
+  border-radius: var(--r-medio); overflow: hidden; cursor: pointer;
+  background: var(--navy-800); transition: transform .15s ease, border-color .2s ease;
+}
+.crush-carta:hover { transform: translateY(-3px); }
+.crush-carta img {
+  width: 100%; aspect-ratio: 4/5; object-fit: cover; object-position: center 22%;
+  display: block;
+}
+.crush-carta .crush-nombre {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 10px 8px;
+  font-weight: 700; font-size: 14px; text-align: left; color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .78));
+}
+.crush-carta.acierto { border-color: var(--green); animation: acierto-late .5s var(--resorte); }
+.crush-carta.error { border-color: var(--red); animation: error-sacude .4s ease; }
+.crush-carta:disabled { cursor: default; }
+.crush-carta:disabled:not(.acierto):not(.error) { filter: grayscale(.65) brightness(.6); }
+.crush-sello {
+  position: absolute; top: 8px; right: 8px; font-size: 26px;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .5));
+}
+@keyframes acierto-late { 0% { transform: scale(1); } 40% { transform: scale(1.05); } 100% { transform: scale(1); } }
+@keyframes error-sacude {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-7px); }
+  75% { transform: translateX(7px); }
+}
+.crush-resultado { margin-top: 14px; max-width: 480px; }
+
 /* ---- cita a ciegas ---- */
 .silueta {
   display: inline-grid; place-items: center; border-radius: 50%;

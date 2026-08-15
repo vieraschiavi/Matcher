@@ -136,6 +136,35 @@ const PT = {
     "Todos os filtros estão no plano grátis. O que se paga é volume e visibilidade, não o direito de filtrar pelo que importa para você.",
   "Elegido": "Escolhido",
 
+  // -- crush time / festejos --
+  "Crush Time": "Crush Time",
+  "Cuatro caras. Una te dio like. Si adivinás cuál, es match instantáneo.":
+    "Quatro rostos. Um curtiu você. Se adivinhar qual, é match na hora.",
+  "Turnos de hoy": "Rodadas de hoje",
+  "¿Quién te dio like?": "Quem curtiu você?",
+  "Siempre hay al menos una persona que te dio like en la ronda. Errar no la revela: seguí jugando.":
+    "Sempre há pelo menos uma pessoa que curtiu você na rodada. Errar não revela: continue jogando.",
+  "Jugar": "Jogar",
+  "Seguir la ronda": "Continuar a rodada",
+  "Se acabaron los turnos de hoy.": "Acabaram as rodadas de hoje.",
+  "Con Plus tenés 5 por día.": "Com o Plus você tem 5 por dia.",
+  "🎯 ¡Acertaste! Es un match": "🎯 Acertou! É um match",
+  "¡Acertaste! Es un match": "Acertou! É um match",
+  "No era 😅": "Não era 😅",
+  "No te decimos quién fue: su like sigue pendiente y puede volver a aparecer.":
+    "Não contamos quem foi: o like continua pendente e pode voltar a aparecer.",
+  "Otra ronda": "Outra rodada",
+  "Listo por hoy": "Chega por hoje",
+  "Mandar mensaje": "Mandar mensagem",
+  "Ver planes": "Ver planos",
+  "Los de hoy": "Os de hoje",
+  "Histórico": "Histórico",
+  "Los más likeados de hoy que pasan tus filtros. Todavía no les respondiste: dales like desde acá.":
+    "Os mais curtidos de hoje que passam seus filtros. Você ainda não respondeu: curta daqui.",
+  "Hoy todavía no hay votados que pasen tus filtros.":
+    "Hoje ainda não há votados que passem seus filtros.",
+  "💛 ¡Alguien te dio like! Mirá quién puede ser en Crush Time":
+    "💛 Alguém curtiu você! Veja quem pode ser no Crush Time",
   // -- cita a ciegas / likes --
   "Cita a ciegas": "Encontro às cegas",
   "Primero la charla, después las caras": "Primeiro a conversa, depois os rostos",
@@ -264,6 +293,35 @@ const EN = {
     "Every filter is in the free plan. What you pay for is volume and visibility, never the right to filter by what matters to you.",
   "Elegido": "Selected",
 
+  // -- crush time / celebrations --
+  "Crush Time": "Crush Time",
+  "Cuatro caras. Una te dio like. Si adivinás cuál, es match instantáneo.":
+    "Four faces. One liked you. Guess right and it's an instant match.",
+  "Turnos de hoy": "Today's turns",
+  "¿Quién te dio like?": "Who liked you?",
+  "Siempre hay al menos una persona que te dio like en la ronda. Errar no la revela: seguí jugando.":
+    "Every round includes at least one person who liked you. A wrong guess never reveals them: keep playing.",
+  "Jugar": "Play",
+  "Seguir la ronda": "Resume round",
+  "Se acabaron los turnos de hoy.": "You're out of turns for today.",
+  "Con Plus tenés 5 por día.": "Plus gives you 5 a day.",
+  "🎯 ¡Acertaste! Es un match": "🎯 You got it! It's a match",
+  "¡Acertaste! Es un match": "You got it! It's a match",
+  "No era 😅": "Not them 😅",
+  "No te decimos quién fue: su like sigue pendiente y puede volver a aparecer.":
+    "We won't tell you who it was: their like stays pending and may show up again.",
+  "Otra ronda": "Another round",
+  "Listo por hoy": "Done for today",
+  "Mandar mensaje": "Send a message",
+  "Ver planes": "See plans",
+  "Los de hoy": "Today's picks",
+  "Histórico": "All-time",
+  "Los más likeados de hoy que pasan tus filtros. Todavía no les respondiste: dales like desde acá.":
+    "Today's most-liked people who pass your filters. You haven't responded yet: like them right here.",
+  "Hoy todavía no hay votados que pasen tus filtros.":
+    "No one voted today passes your filters yet.",
+  "💛 ¡Alguien te dio like! Mirá quién puede ser en Crush Time":
+    "💛 Someone liked you! See who it might be in Crush Time",
   // -- blind date / likes --
   "Cita a ciegas": "Blind date",
   "Primero la charla, después las caras": "Talk first, faces later",

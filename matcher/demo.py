@@ -173,7 +173,15 @@ def _perfil_sintetico(rnd: random.Random, i: int, fuente: fotos.Fuente) -> Perfi
         p.marcar_disponible(rnd.randint(2, 20))
     if p.plan != "gratis":
         p.plan_vence = datetime.utcnow() + timedelta(days=rnd.randint(3, 300))
-    for url in fuente.para(p.id, nombre, genero, rnd.randint(2, 5)):
+    # La cara tiene que coincidir con la presentación del nombre. Un perfil
+    # trans toma nombre de la lista mixta, pero su foto salía del pool
+    # completo: quedaba "Julián" con cara de mujer y se leía como un bug de
+    # la demo, no como una persona. Se elige el pool según el origen del
+    # nombre; el género del PERFIL sigue siendo trans.
+    genero_foto = genero
+    if genero == "trans":
+        genero_foto = "mujer" if nombre in NOMBRES_F else "hombre"
+    for url in fuente.para(p.id, nombre, genero_foto, rnd.randint(2, 5)):
         medios.agregar_foto(p, url)
     return p
 

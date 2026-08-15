@@ -141,6 +141,7 @@ RUTAS_QUE_LISTAN_GENTE = [
     ("/api/cruces", "personas"),
     ("/api/likes-recibidos", "perfiles"),
     ("/api/ranking?limite=50", "top"),
+    ("/api/top-dia", "top"),
 ]
 
 

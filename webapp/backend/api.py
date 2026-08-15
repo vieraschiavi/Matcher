@@ -27,6 +27,7 @@ from matcher import (
     aciegas,
     automatch,
     cruces,
+    crushtime,
     demo,
     filtros,
     geo,
@@ -686,6 +687,39 @@ def correr_automatch(perfil: Perfil = Depends(usuario)):
 # ---------------------------------------------------------------------------
 # Matches y chat
 # ---------------------------------------------------------------------------
+@app.get("/api/top-dia")
+def top_del_dia(perfil: Perfil = Depends(usuario)):
+    """Los más likeados de HOY, filtrados y listos para dar like."""
+    return {"top": almacen().top_del_dia(perfil)}
+
+
+# ---------------------------------------------------------------------------
+# Crush Time
+# ---------------------------------------------------------------------------
+@app.get("/api/crushtime")
+def crushtime_estado(perfil: Perfil = Depends(usuario)):
+    return crushtime.estado(almacen(), perfil)
+
+
+@app.post("/api/crushtime/ronda")
+def crushtime_ronda(perfil: Perfil = Depends(usuario)):
+    try:
+        return crushtime.nueva_ronda(almacen(), perfil)
+    except crushtime.SinTurnos as e:
+        # Mismo contrato que los likes agotados: 402 con plan sugerido, así el
+        # frontend reusa el muro de pago que ya existe.
+        raise SinCupo(str(e), recurso="crushtime", plan_sugerido="plus") from e
+
+
+@app.post("/api/crushtime/adivinar")
+def crushtime_adivinar(
+    ronda: str = Body(embed=True),
+    elegido: str = Body(embed=True),
+    perfil: Perfil = Depends(usuario),
+):
+    return crushtime.adivinar(almacen(), perfil, ronda, elegido)
+
+
 @app.post("/api/aciegas")
 def cita_a_ciegas(perfil: Perfil = Depends(usuario)):
     """Abre una cita a ciegas: chat sí, fotos no, hasta que los dos escriban.

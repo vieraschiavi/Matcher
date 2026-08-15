@@ -125,6 +125,11 @@ export const api = {
   correrAuto: () => pedir("/automatch", { metodo: "POST" }),
 
   citaACiegas: () => pedir("/aciegas", { metodo: "POST" }),
+  topDia: () => pedir("/top-dia"),
+  crushtime: () => pedir("/crushtime"),
+  crushtimeRonda: () => pedir("/crushtime/ronda", { metodo: "POST" }),
+  crushtimeAdivinar: (ronda, elegido) =>
+    pedir("/crushtime/adivinar", { metodo: "POST", cuerpo: { ronda, elegido } }),
   matches: () => pedir("/matches"),
   mensajes: (id) => pedir(`/matches/${id}/mensajes`),
   enviar: (id, texto) => pedir(`/matches/${id}/mensajes`, { metodo: "POST", cuerpo: { texto } }),
