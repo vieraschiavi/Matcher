@@ -39,6 +39,7 @@ from matcher import (
     radar,
     scoring,
     seguridad,
+    vitrinas,
 )
 from matcher.almacen import Almacen, SinCupo
 from matcher.modelos import (
@@ -705,6 +706,31 @@ def boost_activar(perfil: Perfil = Depends(usuario)):
 def top_del_dia(perfil: Perfil = Depends(usuario)):
     """Los más likeados de HOY, filtrados y listos para dar like."""
     return {"top": almacen().top_del_dia(perfil)}
+
+
+# ---------------------------------------------------------------------------
+# Vitrinas: disponibles hoy y más likeados por zona
+# ---------------------------------------------------------------------------
+@app.get("/api/disponibles")
+def disponibles(limite: int = 60, perfil: Perfil = Depends(usuario)):
+    """Quién dijo que sale hoy. Ordenado por cercanía antes que por puntaje:
+    en esta sección "está cerca" vale más que "es muy compatible"."""
+    return vitrinas.disponibles_hoy(almacen(), perfil, limite=limite)
+
+
+@app.get("/api/mas-likeados")
+def mas_likeados(
+    alcance: str = "ciudad",
+    limite: int = vitrinas.TOPE_LISTA,
+    perfil: Perfil = Depends(usuario),
+):
+    """Los 200 más likeados del barrio, de la ciudad o del mundo.
+
+    Pide sesión —a diferencia de `/api/ranking`, que es la vitrina pública— por
+    dos motivos: el alcance se calcula contra TU ciudad y TU posición, y la
+    lista respeta TUS filtros. Sin usuario no hay ninguna de las dos cosas.
+    """
+    return vitrinas.mas_likeados(almacen(), perfil, alcance=alcance, limite=limite)
 
 
 # ---------------------------------------------------------------------------

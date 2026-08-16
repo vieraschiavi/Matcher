@@ -70,17 +70,27 @@ una fracción de lo que cobra la competencia.
    reparto ordenado de `fotos.Fuente`. Si dejás de ser determinista, se caen
    los tests de deck, de ranking y de demo.
 
-8. **Lo que decide el servidor no lo esconde el cliente.** "Quién me dio like"
+8. **El perfil se guarda como un JSON a mano en `almacen._a_json`.** Si agregás
+   un campo a `Perfil`, agregalo también ahí Y en `_desde_json`, o se pierde en
+   cada guardado, en silencio y sin error. Ya pasó con `intenciones` y
+   `disponible_hasta`: "qué buscás" no sobrevivía a editar el perfil y
+   "disponible hoy" no funcionó nunca — se marcaba, respondía 200, y a la
+   lectura siguiente estaba apagado. Lo fija
+   `test_ningun_campo_del_perfil_se_pierde_al_guardar`, que recorre los campos
+   del dataclass en vez de listarlos: un test que los enumere a mano se va a
+   olvidar del próximo igual que se olvidó la serialización.
+
+9. **Lo que decide el servidor no lo esconde el cliente.** "Quién me dio like"
    en el plan gratis devuelve `perfiles: []`, no los perfiles con un blur
    encima. Mandar los datos y taparlos con CSS es la fuga clásica de este
    feature; hay un test.
 
-9. **Nada de promesas que no se pueden sostener.** Los precios de la
+10. **Nada de promesas que no se pueden sostener.** Los precios de la
    competencia en `planes.REFERENCIA_COMPETENCIA` van marcados
    `verificado: False` y la UI muestra el aviso. La pasarela `demo` dice en
    pantalla que no mueve plata.
 
-10. **El login externo no se simula.** Sin `GOOGLE_CLIENT_ID` y
+11. **El login externo no se simula.** Sin `GOOGLE_CLIENT_ID` y
     `GOOGLE_CLIENT_SECRET`, `oauth.disponibles()` devuelve vacío y el botón no
     aparece — nunca agregues un modo "demo" que finja un login, porque es una
     puerta abierta si se despliega. Tres cosas que no se tocan en `oauth.py`:

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, ErrorApi } from "../api";
 import { festejarMatch } from "../avisos";
 import { useApp } from "../estado";
+import { preferenciasEfectivas, todosPermitidos } from "../filtroCliente";
 import { t } from "../i18n";
 import { IcoCorazon, IcoDiana } from "../Iconos";
 
@@ -27,12 +28,43 @@ export default function CrushTime() {
     cargarEstado();
   }, []);
 
+  // El filtro duro también acá, y con una vuelta de tuerca: en el resto de las
+  // pantallas la defensa del cliente es sacar de la lista al que no pasa
+  // (`soloPermitidos`). Acá NO se puede: la ronda son cuatro caras y una te dio
+  // like — si se caen tres, queda una sola y el juego se gana solo.
+  //
+  // Entonces la ronda que trae a alguien que pediste no ver se descarta ENTERA
+  // y se pide otra. El motor ahora revalida al retomar una ronda vieja
+  // (`crushtime.ronda_valida`), así que el reintento sale con los filtros de
+  // hoy; esto es la red por si el pedido lo atendió una instancia con las
+  // preferencias viejas (ver `filtroCliente.js`).
+  const pedirRondaLimpia = async (intentos = 2) => {
+    const permitidas = preferenciasEfectivas(perfil?.preferencias);
+    let ultima = null;
+    for (let i = 0; i < intentos; i++) {
+      const r = await api.crushtimeRonda();
+      ultima = r;
+      if (todosPermitidos(permitidas, r.caras)) return r;
+    }
+    // Se agotaron los intentos: antes que mostrar una ronda que viola el
+    // filtro, no se muestra ninguna. Se avisa por qué, que es lo que separa
+    // "no anda" de "no te muestro gente que pediste no ver".
+    return { ...ultima, invalida: true };
+  };
+
   const jugar = async () => {
     setAviso("");
     setResultado(null);
     setElegida(null);
     try {
-      const r = await api.crushtimeRonda();
+      const r = await pedirRondaLimpia();
+      if (r.invalida) {
+        setRonda(null);
+        setAviso(
+          t("No pudimos armar una ronda que respete tus filtros. Probá de nuevo en un rato.")
+        );
+        return;
+      }
       setRonda(r);
     } catch (e) {
       if (e instanceof ErrorApi && e.sinCupo) setMuro(true);

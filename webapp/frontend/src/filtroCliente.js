@@ -85,3 +85,15 @@ export function pasaFiltroCliente(preferencias, persona) {
 export function soloPermitidos(preferencias, lista, sacar = (x) => x) {
   return (lista || []).filter((x) => pasaFiltroCliente(preferencias, sacar(x)));
 }
+
+/**
+ * ¿Pasan TODOS? Para las pantallas donde filtrar la lista no es una opción.
+ *
+ * Crush Time es el caso: la ronda son cuatro caras y una te dio like. Si se
+ * cae una por el filtro quedan tres, se adivina con 1 en 3 en vez de 1 en 4, y
+ * si se caen tres queda una sola y el juego se gana solo. Ahí la respuesta
+ * correcta no es recortar la lista, es descartar la ronda entera y pedir otra.
+ */
+export function todosPermitidos(preferencias, lista, sacar = (x) => x) {
+  return (lista || []).every((x) => pasaFiltroCliente(preferencias, sacar(x)));
+}

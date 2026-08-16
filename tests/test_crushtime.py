@@ -173,3 +173,84 @@ def test_el_top_del_dia_cuenta_solo_lo_de_hoy_y_filtra(almacen, hacer_perfil, el
     assert hombres[1].id not in ids, "un like de ayer no es 'del día'"
     assert mujer.id not in ids, "el top del día también respeta el filtro duro"
     assert top[0]["likes_hoy"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Regresión: la ronda vieja sobrevivía a un cambio de filtros
+# ---------------------------------------------------------------------------
+# Reportado con captura desde el APK: cuatro caras y tres eran hombres, con el
+# filtro puesto en "mujer". El motor sí filtraba al ARMAR la ronda, pero
+# `nueva_ronda` retomaba la ronda abierta sin revalidar nada, así que la ronda
+# armada con los filtros de antes seguía viva para siempre.
+def test_la_ronda_abierta_se_descarta_si_ya_no_pasa_los_filtros(almacen, hacer_perfil, ella):
+    hombres = _poblar(almacen, hacer_perfil)
+    almacen.interactuar(hombres[0], ella.id, "like")
+    primera = crushtime.nueva_ronda(almacen, ella)
+    assert len(primera["caras"]) == crushtime.OPCIONES
+
+    # Ahora sólo quiere ver mujeres, y hay mujeres para armar una ronda nueva.
+    mujeres = [
+        hacer_perfil(id=f"m{i}", email=f"m{i}@test.local", genero="mujer") for i in range(6)
+    ]
+    for m in mujeres:
+        almacen.crear_perfil(m, "clave-larga-1")
+    almacen.interactuar(mujeres[0], ella.id, "like")
+    ella.preferencias = Preferencias(generos=["mujer"], edad_min=18, edad_max=99)
+    almacen.guardar_perfil(ella)
+
+    segunda = crushtime.nueva_ronda(almacen, ella)
+    assert segunda["ronda"] != primera["ronda"], "retomó la ronda vieja en vez de rearmarla"
+    for cara in segunda["caras"]:
+        assert cara["genero"] == "mujer", "un hombre se coló en la ronda de quien pidió mujeres"
+
+
+def test_descartar_una_ronda_invalida_no_gasta_el_turno(almacen, hacer_perfil, ella):
+    """La ronda quedó vieja por un cambio de filtros, no por culpa del usuario.
+    Si al descartarla se le contara el turno, con el cupo gratis de 1 ronda por
+    día se quedaría sin juego por haber tocado Filtros."""
+    hombres = _poblar(almacen, hacer_perfil)
+    almacen.interactuar(hombres[0], ella.id, "like")
+    crushtime.nueva_ronda(almacen, ella)
+    assert crushtime.rondas_de_hoy(almacen, ella.id) == 1
+
+    mujeres = [
+        hacer_perfil(id=f"m{i}", email=f"m{i}@test.local", genero="mujer") for i in range(6)
+    ]
+    for m in mujeres:
+        almacen.crear_perfil(m, "clave-larga-1")
+    almacen.interactuar(mujeres[0], ella.id, "like")
+    ella.preferencias = Preferencias(generos=["mujer"], edad_min=18, edad_max=99)
+    almacen.guardar_perfil(ella)
+
+    crushtime.nueva_ronda(almacen, ella)
+    # La vieja se borró y entró una nueva: sigue habiendo UNA ronda de hoy.
+    assert crushtime.rondas_de_hoy(almacen, ella.id) == 1
+
+
+def test_la_ronda_que_sigue_siendo_valida_se_retoma_igual_que_antes(almacen, hacer_perfil, ella):
+    """El arreglo no puede romper la regla original: sin cambio de filtros, la
+    ronda abierta se retoma, porque abrir otra sería descartar gratis la
+    difícil."""
+    hombres = _poblar(almacen, hacer_perfil)
+    almacen.interactuar(hombres[0], ella.id, "like")
+    primera = crushtime.nueva_ronda(almacen, ella)
+    segunda = crushtime.nueva_ronda(almacen, ella)
+    assert segunda["ronda"] == primera["ronda"]
+    assert [c["id"] for c in segunda["caras"]] == [c["id"] for c in primera["caras"]]
+
+
+def test_ronda_valida_detecta_a_un_perfil_borrado(almacen, hacer_perfil, ella):
+    """Si una de las caras ya no existe, la ronda tampoco sirve: el payload
+    saldría con tres caras y el juego pasaría a ser 1 en 3."""
+    hombres = _poblar(almacen, hacer_perfil)
+    almacen.interactuar(hombres[0], ella.id, "like")
+    crushtime.nueva_ronda(almacen, ella)
+    fila = almacen.con.execute(
+        "SELECT * FROM crushtime WHERE usuario_id = ?", (ella.id,)
+    ).fetchone()
+    assert crushtime.ronda_valida(almacen, ella, fila)
+
+    otro = [i for i in json.loads(fila["opciones"]) if i != fila["objetivo_id"]][0]
+    almacen.con.execute("DELETE FROM perfiles WHERE id = ?", (otro,))
+    almacen.con.commit()
+    assert not crushtime.ronda_valida(almacen, ella, fila)

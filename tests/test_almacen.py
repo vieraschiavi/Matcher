@@ -260,3 +260,47 @@ def test_baja_logica_saca_del_deck_pero_no_rompe_el_chat(almacen, hacer_perfil):
     almacen.guardar_perfil(b)
     assert almacen.matches_de(a.id) == []       # no se lista
     assert almacen.perfil(b.id) is not None      # pero la fila sigue ahí
+
+
+# ---------------------------------------------------------------------------
+# Regresión: campos que se perdían en cada guardado
+# ---------------------------------------------------------------------------
+# El perfil se guarda serializado como un JSON en una columna. `intenciones` y
+# `disponible_hasta` no estaban en ese JSON, así que se perdían en CADA
+# guardado, en silencio y sin error: "qué buscás" no sobrevivía a editar el
+# perfil, y "disponible hoy" no funcionó nunca — el endpoint respondía 200 y a
+# la lectura siguiente el perfil volvía a figurar como no disponible.
+#
+# El test recorre TODOS los campos del dataclass en vez de listar unos pocos:
+# el bug fue justamente que alguien agregó campos al modelo y se olvidó de la
+# serialización, así que un test que enumera a mano se olvidaría igual.
+def test_ningun_campo_del_perfil_se_pierde_al_guardar(almacen, hacer_perfil):
+    from dataclasses import fields
+
+    p = hacer_perfil(id="completo", email="completo@test.local")
+    p.intenciones = ["relacion_formal", "amistad"]
+    p.marcar_disponible()
+    p.bio = "Probando el ida y vuelta"
+    p.intereses = ["cine", "programar"]
+    almacen.crear_perfil(p, "clave-larga-1")
+    almacen.guardar_perfil(p)
+
+    vuelto = almacen.perfil(p.id)
+    # `clave_hash` no vive en el dataclass y `nacimiento` es date: se comparan
+    # igual porque el ida y vuelta tiene que devolver exactamente lo mismo.
+    for campo in fields(p):
+        assert getattr(vuelto, campo.name) == getattr(p, campo.name), (
+            f"el campo '{campo.name}' no sobrevivió al guardado"
+        )
+
+
+def test_disponible_hoy_sobrevive_al_guardado(almacen, hacer_perfil):
+    """El caso puntual que rompía la vitrina de disponibles."""
+    p = hacer_perfil(id="disp", email="disp@test.local")
+    almacen.crear_perfil(p, "clave-larga-1")
+    p.marcar_disponible()
+    almacen.guardar_perfil(p)
+
+    vuelto = almacen.perfil(p.id)
+    assert vuelto.disponible_hoy is True
+    assert "disponible_hoy" in vuelto.intenciones_vigentes

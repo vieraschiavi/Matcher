@@ -488,7 +488,9 @@ button { font-family: inherit; }
 }
 @keyframes brillo { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) {
-  .main > *, .esqueleto::after { animation: none; }
+  /* El punto que late de "disponible hoy" también entra acá: es decorativo,
+     y un parpadeo permanente es justo lo que esta preferencia pide evitar. */
+  .main > *, .esqueleto::after, .insignia-hoy::before { animation: none; }
 }
 
 /* ---- mapa (dónde está la gente que encontró el radar) ---- */
@@ -663,6 +665,19 @@ button { font-family: inherit; }
 .insignia-verif { background: rgba(91, 141, 239, .18); color: #a8c4ff; border: 1px solid rgba(91, 141, 239, .45); }
 .insignia-sint { background: rgba(147, 165, 192, .16); color: var(--muted); border: 1px solid var(--line); }
 .insignia-auto { background: rgba(142, 91, 239, .2); color: #cbb2ff; border: 1px solid rgba(142, 91, 239, .5); }
+/* "Disponible hoy" lleva el acento coral —el primario de la marca— porque es
+   la señal con más intención de la app: la persona dijo que sale hoy. El punto
+   que late es la misma convención que usa todo el mundo para "en vivo". */
+.insignia-hoy {
+  background: rgba(255, 77, 109, .18); color: var(--coral);
+  border: 1px solid rgba(255, 77, 109, .45);
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.insignia-hoy::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--coral); animation: latido 1.8s ease-in-out infinite;
+}
+@keyframes latido { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
 
 /* Sello de decisión que aparece al arrastrar. */
 /* Los sellos viven siempre en el DOM y se revelan con una clase en la carta.
@@ -929,6 +944,27 @@ table.tabla tr:hover td { background: var(--navy-800); }
 .pestanas { display: flex; gap: 6px; background: var(--navy-800); border: 1px solid var(--line); border-radius: 11px; padding: 4px; margin-bottom: 16px; }
 .pestanas button { flex: 1; border: none; background: none; color: var(--muted); padding: 8px; border-radius: 8px; font-weight: 700; font-size: 13.5px; cursor: pointer; }
 .pestanas button.on { background: var(--navy-950); color: var(--ink); }
+/* Con tres pestañas el ancho de dos deja los textos partidos en dos renglones.
+   Los botones ya son flex:1, así que sólo hay que darle aire al contenedor. */
+.pestanas-tres { max-width: 460px; }
+@media (max-width: 860px) { .pestanas-tres { max-width: none; } }
+/* Columnas de tabla que sólo existen si hay ancho. En un teléfono la tabla de
+   seis columnas se cortaba a la mitad del encabezado ("POPULARIDA") y las dos
+   últimas quedaban fuera de la pantalla, detrás de un scroll horizontal que
+   nadie descubre. `.solo-angosto` es el par: el dato que se pierde reaparece
+   como insignia abajo del nombre. */
+.solo-angosto { display: none; }
+@media (max-width: 860px) {
+  .col-ancha { display: none; }
+  .solo-angosto { display: inline-flex; }
+}
+/* Un botón que se lee como enlace. Es un <button> y no un <a> porque no navega
+   por URL: dispara una acción. Ponerle un <a href="#"> lo rompe con el
+   HashRouter y además miente sobre lo que hace. */
+.enlace-boton {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--coral); font: inherit; font-weight: 700; text-decoration: underline;
+}
 /* Botón de proveedor externo: blanco, como lo pide la guía de marca de Google
    y como lo espera la gente. Si se pinta con el color de la app, deja de
    leerse como "esto es Google" y baja la conversión del alta. */
@@ -963,7 +999,13 @@ table.tabla tr:hover td { background: var(--navy-800); }
 
 /* ---- móvil: barra inferior, mismo CSS ---- */
 @media (max-width: 860px) {
-  :root { --nav-alto: 62px; }
+  /* 62 px era mentira: medida en el navegador, la barra da 67,75 px (14 de
+     padding propio + el contenido). Con --nav-alto por debajo del alto real,
+     el hueco que reserva .main queda corto y el último panel de cada pantalla
+     aparece cortado — con el inset de gestos del teléfono encima, peor. Se
+     redondea para arriba a propósito: que sobre un pixel no se nota, que
+     falte se ve. */
+  :root { --nav-alto: 68px; }
   .layout { flex-direction: column; }
   /* Barra inferior de vidrio: deja ver la foto de la tarjeta pasando por
      debajo en vez de cortarla con una banda opaca. El fallback opaco va
@@ -988,10 +1030,18 @@ table.tabla tr:hover td { background: var(--navy-800); }
   .nav-texto { display: none; }
   .nav-texto-corto { display: block; }
 
+  /* El hueco de la barra de estado lo reserva la BARRA, no el body.
+     Estaba en `body { padding-top: env(safe-area-inset-top) }`, y con la barra
+     en `position: sticky` eso no alcanza: sticky se ancla al viewport, no a la
+     caja del body, así que apenas se scrolleaba un pixel la barra subía y el
+     logo quedaba tapado por el reloj y la señal. Se ve en cualquier captura
+     del APK con la pantalla scrolleada. Poniendo el inset como padding de la
+     propia barra, el hueco viaja con ella. */
+  body { padding-top: 0; }
   .barra-sup {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
     position: sticky; top: 0; z-index: 40;
-    padding: 10px 14px; margin: 0;
+    padding: calc(10px + env(safe-area-inset-top)) 14px 10px; margin: 0;
     background: rgba(18, 13, 28, .78);
     border-bottom: 1px solid rgba(255, 255, 255, .07);
   }
@@ -1024,7 +1074,12 @@ table.tabla tr:hover td { background: var(--navy-800); }
   }
   .nav-item .icono { opacity: 1; }
   .nav-item .globo { position: absolute; margin: 0; transform: translate(15px, -11px); }
-  .main { padding: 16px 14px calc(20px + var(--nav-alto)); }
+  /* La barra inferior mide --nav-alto MÁS el inset de gestos del teléfono
+     (ver el padding de .sidebar). Reservando sólo --nav-alto, el último panel
+     de cada pantalla quedaba cortado justo por esos pixeles: en el APK se veía
+     media línea del chip de "Por qué <nombre>" y no había forma de scrollear
+     más. El inset tiene que estar en las dos cuentas o no cierran. */
+  .main { padding: 16px 14px calc(20px + var(--nav-alto) + env(safe-area-inset-bottom)); }
   .deck-zona, .zona-chat, .zona-radar { grid-template-columns: 1fr; }
   .deck { max-height: none; aspect-ratio: 4 / 5.4; }
   .page-title { font-size: 22px; }

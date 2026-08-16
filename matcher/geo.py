@@ -264,6 +264,15 @@ def coordenadas(id_ciudad: str) -> tuple[float, float] | None:
     return (dato[1], dato[2]) if dato else None
 
 
+def nombre_ciudad(id_ciudad: str) -> str:
+    """El nombre lindo de la ciudad, para mostrar. Cadena vacía si el id no
+    está en el catálogo — nunca el id crudo: "UY-mvd" en pantalla se lee como
+    un error de la app, y en un título como "Los más likeados de UY-mvd" se lee
+    como que la app no sabe dónde está el usuario."""
+    dato = CIUDADES.get(id_ciudad)
+    return dato[0] if dato else ""
+
+
 def equipos_de(codigo_pais: str) -> list[str]:
     """Equipos del país. Vacío si el país no está en el catálogo."""
     pais = CATALOGO.get(codigo_pais)

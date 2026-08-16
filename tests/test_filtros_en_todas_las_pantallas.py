@@ -17,9 +17,9 @@ from datetime import datetime
 
 import pytest
 
-from matcher import cruces
+from matcher import cruces, crushtime
 from matcher.filtros import pasa_filtros
-from matcher.modelos import Preferencias
+from matcher.modelos import DatosInvalidos, Preferencias
 from tests.conftest import entrar
 from webapp.backend import api as backend
 
@@ -142,6 +142,12 @@ RUTAS_QUE_LISTAN_GENTE = [
     ("/api/likes-recibidos", "perfiles"),
     ("/api/ranking?limite=50", "top"),
     ("/api/top-dia", "top"),
+    # Las dos vitrinas nuevas. Los tres alcances van por separado porque cada
+    # uno arma su propio universo y el filtro se podría escapar en uno solo.
+    ("/api/disponibles", "personas"),
+    ("/api/mas-likeados?alcance=mundo&limite=200", "top"),
+    ("/api/mas-likeados?alcance=ciudad&limite=200", "top"),
+    ("/api/mas-likeados?alcance=barrio&limite=200", "top"),
 ]
 
 
@@ -180,3 +186,88 @@ def test_el_ranking_sin_sesion_sigue_siendo_publico(cliente):
     r = cliente.get("/api/ranking?limite=50")
     assert r.status_code == 200
     assert len(r.json()["top"]) > 0
+
+
+def _algunos_me_dieron_like(a, yo_id, por_genero=2):
+    """Que UNOS CUANTOS de cada género le hayan dado like, no todos.
+
+    La primera versión de esta ayuda hacía que TODO el padrón diera like, y con
+    eso el test pasaba sin probar nada: los señuelos de una ronda son, por
+    definición, gente que NO te dio like (si no, "errar" podría ser acertarle a
+    otro que también te quiso). Sin un solo señuelo disponible, la ronda no se
+    arma nunca, la API devuelve 400 y el test se saltaba entero.
+
+    Con dos por género quedan likes pendientes para el objetivo y sobra padrón
+    para los tres señuelos.
+    """
+    cuenta = {}
+    for otro in a.todos():
+        if otro.id == yo_id or not (otro.completo and otro.activo):
+            continue
+        if cuenta.get(otro.genero, 0) >= por_genero:
+            continue
+        try:
+            a.interactuar(otro, yo_id, "like")
+        except DatosInvalidos:
+            continue
+        cuenta[otro.genero] = cuenta.get(otro.genero, 0) + 1
+    return cuenta
+
+
+def test_crush_time_tampoco_muestra_a_quien_el_filtro_descarta(cliente):
+    """Crush Time se escapaba del barrido de arriba por ser POST, y fue
+    justamente donde se vio el bug: una captura del APK con cuatro caras, tres
+    del género que el usuario había pedido no ver.
+
+    La ronda se pide DOS veces con filtros distintos: la segunda no puede
+    devolver la ronda armada con los filtros viejos.
+    """
+    cabeceras = entrar(cliente)
+    a = backend._almacen
+    yo = a.perfil(cliente.get("/api/yo", headers=cabeceras).json()["perfil"]["id"])
+    # Plan pago: con el cupo gratis de 1 ronda por día, la segunda vuelta del
+    # bucle se iría por "sin turnos" y el test no probaría nada.
+    yo.plan = "gold"
+    a.guardar_perfil(yo)
+    assert _algunos_me_dieron_like(a, yo.id).get("mujer"), "hace falta un like de mujer"
+
+    rondas = []
+    for generos in (["hombre"], ["mujer"]):
+        assert cliente.patch(
+            "/api/yo",
+            json={"preferencias": {"generos": generos, "edad_min": 18, "edad_max": 99}},
+            headers=cabeceras,
+        ).status_code == 200
+
+        resp = cliente.post("/api/crushtime/ronda", headers=cabeceras)
+        assert resp.status_code == 200, (
+            f"no se armó ronda con filtro {generos}: {resp.status_code} {resp.text[:160]}"
+        )
+        datos = resp.json()
+        rondas.append(datos["ronda"])
+        yo = a.perfil(yo.id)
+        assert datos["caras"], "una ronda sin caras no es una ronda"
+        for cara in datos["caras"]:
+            assert pasa_filtros(yo, a.perfil(cara["id"]), reciproco=False)[0], (
+                f"Crush Time mostró a {cara['nombre']} ({cara['genero']}) "
+                f"con el filtro en {generos}"
+            )
+
+    assert rondas[0] != rondas[1], (
+        "devolvió la MISMA ronda después de cambiar el filtro: "
+        "es exactamente el bug de la captura"
+    )
+
+
+def test_la_ronda_de_crush_time_siempre_trae_cuatro_caras(cliente):
+    """El filtro no puede 'arreglarse' recortando la ronda: con tres caras el
+    juego pasa a ser 1 en 3, y con una se gana solo. O salen las cuatro que
+    pasan el filtro, o no sale ronda."""
+    cabeceras = entrar(cliente)
+    a = backend._almacen
+    yo_id = cliente.get("/api/yo", headers=cabeceras).json()["perfil"]["id"]
+    _algunos_me_dieron_like(a, yo_id)
+
+    resp = cliente.post("/api/crushtime/ronda", headers=cabeceras)
+    assert resp.status_code == 200, f"{resp.status_code} {resp.text[:160]}"
+    assert len(resp.json()["caras"]) == crushtime.OPCIONES

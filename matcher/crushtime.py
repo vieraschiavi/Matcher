@@ -92,6 +92,26 @@ def _pendientes_que_me_gustaron(almacen, perfil: Perfil) -> list[Perfil]:
     return salida
 
 
+def ronda_valida(almacen, perfil: Perfil, fila) -> bool:
+    """¿Todas las caras de esta ronda siguen pasando los filtros del usuario?
+
+    Existe porque la ronda se guarda en la base y los filtros se cambian
+    después. Si alguien juega una ronda, va a Filtros y pide "sólo mujeres",
+    al volver se encontraba con la MISMA ronda de antes —tres hombres
+    incluidos— porque retomar no revalidaba nada. Reportado desde el APK con
+    una captura: cuatro caras, tres de ellas del género que el usuario había
+    pedido no ver.
+
+    En serverless pasa lo mismo sin tocar los filtros: la instancia que armó la
+    ronda podía tener las preferencias viejas (ver `filtroCliente.js`).
+    """
+    for id_ in json.loads(fila["opciones"]):
+        otro = almacen.perfil(id_)
+        if not otro or not pasa_filtros(perfil, otro, reciproco=False)[0]:
+            return False
+    return True
+
+
 def nueva_ronda(almacen, perfil: Perfil, ahora: datetime | None = None) -> dict:
     # Si quedó una ronda sin resolver, se retoma ésa: abrir otra sería una
     # forma gratis de descartar la difícil. Va ANTES del cupo a propósito —
@@ -102,7 +122,14 @@ def nueva_ronda(almacen, perfil: Perfil, ahora: datetime | None = None) -> dict:
         (perfil.id,),
     ).fetchone()
     if abierta:
-        return _armar_payload(almacen, abierta)
+        if ronda_valida(almacen, perfil, abierta):
+            return _armar_payload(almacen, abierta)
+        # La ronda quedó vieja respecto de los filtros de hoy. Se BORRA en vez
+        # de marcarse resuelta: marcarla resuelta le comería el turno al
+        # usuario por un problema que no causó. Y al borrarla, el flujo sigue
+        # abajo y arma una nueva con los filtros vigentes.
+        almacen.con.execute("DELETE FROM crushtime WHERE id = ?", (abierta["id"],))
+        almacen.con.commit()
 
     maximo = planes.limites_de(perfil).crushtime_por_dia
     if rondas_de_hoy(almacen, perfil.id, ahora) >= maximo:

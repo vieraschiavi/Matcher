@@ -52,7 +52,10 @@ const MENU = [
   // edita una vez por semana.
   { a: "/crush", Icono: IcoDiana, texto: "Crush Time", corta: "Crush", principal: true },
   { a: "/perfil", Icono: IcoPersona, texto: "Mi perfil", corta: "Perfil" },
-  { a: "/ranking", Icono: IcoTrofeo, texto: "Más votados", corta: "Top" },
+  // Dejó de ser sólo el ranking: adentro viven "disponible hoy", los más
+  // likeados del día y la tabla por barrio/ciudad/mundo. "Más votados" nombraba
+  // una de las tres y escondía las otras dos.
+  { a: "/ranking", Icono: IcoTrofeo, texto: "Explorar", corta: "Top" },
   { a: "/filtros", Icono: IcoFiltros, texto: "Filtros", corta: "Filtros" },
   { a: "/planes", Icono: IcoDiamante, texto: "Planes", corta: "Planes" },
 ];

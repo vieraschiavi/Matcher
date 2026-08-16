@@ -288,6 +288,15 @@ class Almacen:
                 "equipo": p.equipo,
                 "bio": p.bio,
                 "intereses": p.intereses,
+                # `intenciones` y `disponible_hasta` faltaban acá, y como el
+                # perfil entero se guarda como este JSON, los dos se perdían en
+                # CADA guardado. O sea: "qué buscás" no sobrevivía a editar el
+                # perfil, y "disponible hoy" no funcionaba nunca — se marcaba,
+                # el endpoint respondía 200, y a la lectura siguiente volvía a
+                # estar apagado. Apareció al escribir la vitrina de disponibles:
+                # ningún perfil figuraba, ni recién marcado.
+                "intenciones": p.intenciones,
+                "disponible_hasta": _iso(p.disponible_hasta),
                 "fotos": [m.a_dict() for m in p.fotos],
                 "videos": [m.a_dict() for m in p.videos],
                 "preferencias": p.preferencias.a_dict(),
@@ -321,6 +330,8 @@ class Almacen:
             equipo=d.get("equipo", ""),
             bio=d.get("bio", ""),
             intereses=list(d.get("intereses") or []),
+            intenciones=list(d.get("intenciones") or []),
+            disponible_hasta=_dt(d.get("disponible_hasta")),
             fotos=[Media.desde_dict(m) for m in d.get("fotos") or []],
             videos=[Media.desde_dict(m) for m in d.get("videos") or []],
             preferencias=Preferencias.desde_dict(d.get("preferencias")),
