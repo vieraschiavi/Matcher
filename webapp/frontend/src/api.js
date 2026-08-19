@@ -1,3 +1,5 @@
+import { Capacitor } from "@capacitor/core";
+
 // Cliente HTTP. Una sola puerta a la API: si cada componente hace su fetch,
 // el manejo del 401 y del 402 (sin cupo) termina copiado en quince lugares y
 // alguno se olvida de alguno.
@@ -5,13 +7,38 @@
 // A dónde le pega la app.
 //
 // En web es same-origin: el propio backend sirve el dist/, así que alcanza con
-// rutas relativas. En el APK y en iOS NO: ahí el frontend vive en
-// capacitor://localhost y "/api" resolvería contra el propio WebView, que no
-// tiene backend. La app arrancaba en blanco y sin un solo error visible.
+// rutas relativas. En el APK y en iOS NO: ahí el frontend vive en un origen
+// local (`https://localhost`, ver abajo) y "/api" resolvería contra el propio
+// WebView, que no tiene backend. La app arrancaba en blanco y sin un solo
+// error visible.
 //
 // Por eso la URL del servidor se compila adentro del bundle con
 // VITE_API_URL. Sin eso, un APK instalado no puede hablar con nadie.
-const NATIVO = typeof window !== "undefined" && /^(capacitor|ionic|file):/.test(window.location.protocol);
+
+// ---------------------------------------------------------------------------
+// ¿Esto corre DENTRO de la app instalada?
+//
+// Se hacía mirando el protocolo (`capacitor:`, `ionic:`, `file:`) y estaba MAL,
+// porque `capacitor.config.json` usa `androidScheme: "https"` — que es lo
+// recomendado, porque habilita las APIs que exigen contexto seguro (cámara y
+// geolocalización). Con eso el WebView carga desde `https://localhost`, así que
+// la detección por protocolo daba SIEMPRE false adentro del APK.
+//
+// No se notaba porque el único uso era elegir la URL de la API, y en el APK
+// `VITE_API_URL` viene compilada y gana igual. Pero apenas se colgaron
+// decisiones de esta bandera, el error se volvió grave: en el APK se mostraría
+// el botón de comprar (rechazo seguro de las tiendas, ver `cobroEnApp.js`) y el
+// login iría por el WebView, que Google rechaza (ver `loginNativo.js`).
+//
+// `Capacitor.isNativePlatform()` es la API oficial y no depende del esquema. El
+// chequeo de protocolo queda de respaldo por si el global no está inyectado.
+const NATIVO = Boolean(
+  Capacitor.isNativePlatform() ||
+    // Respaldo por si el global no llegó a inyectarse: no cuesta nada y el
+    // costo de equivocarse en esta bandera es un rechazo de tienda.
+    (typeof window !== "undefined" &&
+      /^(capacitor|ionic|file):/.test(window.location.protocol))
+);
 const CONFIGURADA = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 export const BASE = CONFIGURADA || (NATIVO ? "https://api.matcher.app" : "");
 export const esNativo = NATIVO;
