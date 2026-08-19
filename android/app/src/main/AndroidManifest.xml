@@ -24,6 +24,25 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Vuelta del login con Google/Facebook.
+
+                 El navegador del sistema termina en `com.matcher.app://auth/…`
+                 y Android tiene que saber que ese esquema es de esta app. Sin
+                 este bloque el enlace no lo abre nadie: el usuario se loguea,
+                 el navegador muestra "no se puede abrir la página" y la app
+                 se queda esperando para siempre.
+
+                 `singleTask` (en el <activity>) hace que el enlace llegue a la
+                 instancia YA abierta en vez de arrancar una segunda: si no, el
+                 usuario vuelve a una app en blanco y pierde lo que estaba
+                 haciendo. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.matcher.app" android:host="auth" />
+            </intent-filter>
+
         </activity>
 
         <provider

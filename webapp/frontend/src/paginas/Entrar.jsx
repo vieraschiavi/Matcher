@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import Logo from "../Logo";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../estado";
+import { entrarConProveedor, hayLoginNativo } from "../loginNativo";
 import { GENEROS, alternar } from "../vocabulario";
 
 // Etiqueta y color por proveedor. Sólo se muestran los que el backend reporta
@@ -28,6 +29,7 @@ const CLAVE_DEMO = "matcher2026";
 export default function Entrar() {
   const { entrar, entrarConToken, registrar, catalogos, sesionCaida } = useApp();
   const [params] = useSearchParams();
+  const navegar = useNavigate();
   const [pestana, setPestana] = useState("entrar");
   const [error, setError] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -89,10 +91,22 @@ export default function Entrar() {
     setError("");
     setOcupado(true);
     try {
-      const { url } = await api.inicioLogin(nombre);
+      if (hayLoginNativo()) {
+        // App instalada: navegador del sistema + vuelta por enlace profundo.
+        // El WebView no sirve — Google lo rechaza y el token caería en el
+        // origen equivocado. Está explicado en `loginNativo.js`.
+        const r = await entrarConProveedor(nombre);
+        if (r.token) await entrarConToken(r.token);
+        else if (r.alta) navegar(`/completar?alta=${encodeURIComponent(r.alta)}`);
+        setOcupado(false);
+        return;
+      }
+      const { url } = await api.inicioLogin(nombre, "web");
       window.location.href = url; // se va al proveedor y vuelve al callback
     } catch (e) {
-      setError(e.message);
+      // Cerrar el navegador a mano no es un error que haya que mostrar en
+      // rojo: el usuario ya sabe que canceló.
+      if (e.message !== "cancelado") setError(ERRORES[e.message] || e.message);
       setOcupado(false);
     }
   };

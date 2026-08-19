@@ -96,7 +96,11 @@ export const api = {
 
   registro: (datos) => pedir("/registro", { metodo: "POST", cuerpo: datos }),
   proveedoresLogin: () => pedir("/auth/proveedores"),
-  inicioLogin: (nombre) => pedir(`/auth/${nombre}/inicio`),
+  // `destino` decide por dónde vuelve el proveedor: "web" a esta misma web,
+  // "app" a un enlace profundo que el sistema enruta a la app instalada
+  // (ver `loginNativo.js` y `matcher/oauth.py`).
+  inicioLogin: (nombre, destino = "web") =>
+    pedir(`/auth/${nombre}/inicio?destino=${encodeURIComponent(destino)}`),
   leerAlta: (token) => pedir(`/auth/alta/${token}`),
   completarAlta: (datos) => pedir("/auth/completar", { metodo: "POST", cuerpo: datos }),
   login: (email, clave) => pedir("/login", { metodo: "POST", cuerpo: { email, clave } }),

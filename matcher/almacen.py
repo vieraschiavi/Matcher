@@ -14,6 +14,7 @@ importan (deck, matches, cupos) van por tablas relacionales de verdad.
 from __future__ import annotations
 
 import json
+import secrets
 import sqlite3
 import threading
 import uuid
@@ -304,6 +305,7 @@ class Almacen:
                 "plan_vence": _iso(p.plan_vence),
                 "verificado": p.verificado,
                 "activo": p.activo,
+                "borrada": p.borrada,
                 "sintetico": p.sintetico,
                 "creado": _iso(p.creado),
                 "ultima_actividad": _iso(p.ultima_actividad),
@@ -339,6 +341,7 @@ class Almacen:
             plan_vence=_dt(d.get("plan_vence")),
             verificado=bool(d.get("verificado", False)),
             activo=bool(d.get("activo", True)),
+            borrada=bool(d.get("borrada", False)),
             sintetico=bool(d.get("sintetico", False)),
             creado=_dt(d.get("creado")) or datetime.utcnow(),
             ultima_actividad=_dt(d.get("ultima_actividad")) or datetime.utcnow(),
@@ -555,6 +558,82 @@ class Almacen:
         self.con.execute("DELETE FROM sesiones WHERE token = ?", (token,))
         if seguridad.leer_sesion(token):
             self._revocar(token)
+        self.con.commit()
+
+    def borrar_cuenta(self, perfil: Perfil) -> None:
+        """Borra la cuenta de verdad, sin romper el chat del otro lado.
+
+        Antes esto era `perfil.activo = False` y nada más. Dos problemas, los
+        dos encontrados en la auditoría end-to-end:
+
+        1. **La persona quedaba encerrada.** El email seguía ocupado, así que
+           registrarse de nuevo daba "ya existe una cuenta con ese email" y
+           entrar daba 401 por estar inactiva. No había forma de volver.
+        2. **Las dos tiendas exigen borrado real.** Apple (5.1.1(v)) y Google
+           Play piden que la app permita borrar la cuenta y los datos, no
+           desactivarla. Un flag que conserva email, fotos y ubicación no
+           cumple, y es causal de rechazo.
+
+        Lo que se hace, que es lo que hacen las apps grandes:
+
+        - Los datos personales se BORRAN: fotos, videos, bio, intereses,
+          nombre, nacimiento, ubicaciones y pings. La ubicación primero, que es
+          el dato más sensible que guarda la app.
+        - El email se LIBERA (queda una lápida interna con el id), así que la
+          persona puede abrir una cuenta nueva cuando quiera. La contraseña se
+          reemplaza por una imposible de acertar.
+        - La fila del perfil SE QUEDA, vaciada y marcada como borrada, para que
+          nada (matches, mensajes, reportes) quede apuntando a la nada. El
+          match en sí desaparece de la lista del otro —`matches_de` descarta a
+          los inactivos— que es lo que hacen todas las apps de la categoría y
+          lo correcto para la privacidad del que se fue: dejarle al otro una
+          conversación abierta con un perfil sin nombre ni foto no le sirve a
+          nadie.
+        - Las sesiones se cierran todas: la app abierta en otro teléfono no
+          puede seguir usando la cuenta.
+        - Los reportes RECIBIDOS se conservan. Si borrarse limpiara las
+          denuncias, sería la forma más fácil de volver a entrar con la ficha
+          en blanco después de acosar a alguien.
+        """
+        # 1. Datos personales y de ubicación.
+        for tabla in ("ubicaciones", "pings"):
+            self.con.execute(f"DELETE FROM {tabla} WHERE usuario_id = ?", (perfil.id,))
+        self.con.execute(
+            "DELETE FROM identidades WHERE usuario_id = ?", (perfil.id,)
+        )
+        # 2. Sesiones: se cierran todas, no sólo la actual.
+        for fila in self.con.execute(
+            "SELECT token FROM sesiones WHERE usuario_id = ?", (perfil.id,)
+        ).fetchall():
+            self._revocar(fila["token"])
+        self.con.execute("DELETE FROM sesiones WHERE usuario_id = ?", (perfil.id,))
+
+        # 3. El perfil se vacía. Se conserva la fila, no la persona.
+        perfil.activo = False
+        perfil.borrada = True
+        perfil.nombre = "Cuenta eliminada"
+        perfil.bio = ""
+        perfil.intereses = []
+        perfil.intenciones = []
+        perfil.fotos = []
+        perfil.videos = []
+        perfil.equipo = ""
+        perfil.ciudad = ""
+        perfil.disponible_hasta = None
+        perfil.verificado = False
+
+        # 4. El email se libera. La lápida no es un email válido, así que nadie
+        #    puede reclamarlo ni entrar con él.
+        lapida = f"borrada+{perfil.id}@matcher.invalid"
+        self.con.execute(
+            "UPDATE perfiles SET email = ?, clave_hash = ?, datos = ? WHERE id = ?",
+            (
+                lapida,
+                seguridad.hashear(secrets.token_urlsafe(32)),
+                self._a_json(perfil),
+                perfil.id,
+            ),
+        )
         self.con.commit()
 
     def tocar(self, id_: str) -> None:

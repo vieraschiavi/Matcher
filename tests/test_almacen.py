@@ -304,3 +304,104 @@ def test_disponible_hoy_sobrevive_al_guardado(almacen, hacer_perfil):
     vuelto = almacen.perfil(p.id)
     assert vuelto.disponible_hoy is True
     assert "disponible_hoy" in vuelto.intenciones_vigentes
+
+
+# ---------------------------------------------------------------------------
+# Borrar la cuenta de verdad
+# ---------------------------------------------------------------------------
+# Encontrado en la auditoría end-to-end: `DELETE /api/yo` sólo ponía
+# `activo = False`. Consecuencias, las dos graves:
+#   1. el email quedaba ocupado, así que la persona no podía volver a
+#      registrarse ("ya existe una cuenta") ni entrar (401 por inactiva);
+#   2. Apple (5.1.1(v)) y Google Play exigen borrado real de la cuenta y los
+#      datos, no una desactivación — es causal de rechazo.
+def test_borrar_la_cuenta_libera_el_email(almacen, hacer_perfil):
+    p = hacer_perfil(id="chau", email="chau@test.local")
+    almacen.crear_perfil(p, "clave-larga-1")
+    almacen.borrar_cuenta(p)
+
+    # El email vuelve a estar libre: se puede abrir una cuenta nueva con él.
+    otro = hacer_perfil(id="nuevo", email="chau@test.local")
+    almacen.crear_perfil(otro, "clave-larga-2")
+    assert almacen.buscar_por_email("chau@test.local").id == "nuevo"
+
+
+def test_borrar_la_cuenta_no_deja_datos_personales(almacen, hacer_perfil):
+    from datetime import datetime
+
+    p = hacer_perfil(id="chau2", email="chau2@test.local", equipo="Peñarol")
+    p.bio = "Algo muy personal"
+    p.intereses = ["cine"]
+    p.intenciones = ["amistad"]
+    almacen.crear_perfil(p, "clave-larga-1")
+    almacen.guardar_ubicacion(p.id, -34.9, -56.16, datetime.utcnow())
+    almacen.borrar_cuenta(p)
+
+    vuelto = almacen.perfil(p.id)
+    assert vuelto.borrada is True
+    assert vuelto.activo is False
+    assert vuelto.nombre == "Cuenta eliminada"
+    assert vuelto.bio == ""
+    assert vuelto.fotos == [] and vuelto.videos == []
+    assert vuelto.intereses == [] and vuelto.intenciones == []
+    assert vuelto.equipo == "" and vuelto.ciudad == ""
+    # La ubicación es el dato más sensible que guarda la app: no puede quedar.
+    assert almacen.ubicacion_de(p.id) is None
+
+
+def test_borrar_la_cuenta_saca_el_match_sin_romper_al_otro(almacen, hacer_perfil):
+    """Qué le pasa al que se queda.
+
+    El match desaparece de su lista, que es lo que hacen todas las apps de la
+    categoría y además es lo correcto para la privacidad del que se fue: su
+    nombre y su foto ya no existen, así que dejarle una conversación abierta
+    con un fantasma no le sirve a nadie.
+
+    Lo que NO puede pasar es que se rompa: la fila del perfil se conserva
+    (vaciada) para que nada quede apuntando a la nada, y la lista del otro
+    tiene que seguir respondiendo sin explotar.
+    """
+    a = hacer_perfil(id="se_va", email="sevA@test.local", genero="mujer")
+    b = hacer_perfil(id="se_queda", email="seqB@test.local", genero="mujer")
+    for p in (a, b):
+        almacen.crear_perfil(p, "clave-larga-1")
+    almacen.interactuar(a, b.id, "like")
+    r = almacen.interactuar(b, a.id, "like")
+    assert r["match"], "el escenario necesita un match"
+
+    almacen.borrar_cuenta(a)
+    # No explota, y el que se fue no queda expuesto en la lista del otro.
+    matches = almacen.matches_de(b.id)
+    assert all(m["con"]["id"] != a.id for m in matches)
+    # La fila sigue existiendo: nada quedó apuntando a la nada.
+    assert almacen.perfil(a.id) is not None
+
+
+def test_borrar_la_cuenta_cierra_todas_las_sesiones(almacen, hacer_perfil):
+    """No alcanza con cerrar la sesión actual: la app abierta en otro teléfono
+    seguiría usando una cuenta que ya no existe."""
+    p = hacer_perfil(id="chau3", email="chau3@test.local")
+    almacen.crear_perfil(p, "clave-larga-1")
+    t1 = almacen.abrir_sesion(p)
+    t2 = almacen.abrir_sesion(p)
+    assert almacen.por_token(t1) and almacen.por_token(t2)
+
+    almacen.borrar_cuenta(p)
+    assert almacen.por_token(t1) is None
+    assert almacen.por_token(t2) is None
+
+
+def test_borrar_la_cuenta_conserva_los_reportes_recibidos(almacen, hacer_perfil):
+    """Si borrarse limpiara las denuncias, sería la forma más fácil de volver a
+    entrar con la ficha en blanco después de acosar a alguien."""
+    acosador = hacer_perfil(id="malo", email="malo@test.local")
+    victima = hacer_perfil(id="vic", email="vic@test.local")
+    for p in (acosador, victima):
+        almacen.crear_perfil(p, "clave-larga-1")
+    almacen.reportar(victima, acosador.id, "acoso", "detalle")
+
+    almacen.borrar_cuenta(acosador)
+    filas = almacen.con.execute(
+        "SELECT COUNT(*) c FROM reportes WHERE a_id = ?", (acosador.id,)
+    ).fetchone()
+    assert filas["c"] == 1

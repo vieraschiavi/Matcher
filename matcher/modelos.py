@@ -225,6 +225,11 @@ class Perfil:
     plan_vence: datetime | None = None
     verificado: bool = False
     activo: bool = True
+    # Distinto de `activo`: "desactivada" es una pausa reversible; "borrada" es
+    # definitivo y ya no queda nada personal adentro. La fila sobrevive sólo
+    # para que los matches del otro lado no apunten a la nada — del otro lado
+    # se ve "Cuenta eliminada". Ver `almacen.borrar_cuenta`.
+    borrada: bool = False
     sintetico: bool = False
     creado: datetime = field(default_factory=datetime.utcnow)
     ultima_actividad: datetime = field(default_factory=datetime.utcnow)

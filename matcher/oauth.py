@@ -53,6 +53,55 @@ from .modelos import DatosInvalidos
 _CONSUMIDOS: dict[str, float] = {}
 VIDA_ESTADO_SEG = 600
 
+# ---------------------------------------------------------------------------
+# A dónde vuelve el navegador cuando el proveedor terminó
+# ---------------------------------------------------------------------------
+#
+# Hay DOS destinos posibles y ninguno más:
+#
+# - `web`: el navegador ya está en la web del backend, así que vuelve a una
+#   ruta del propio sitio.
+# - `app`: el login salió de la app instalada. Ahí volver a la web no sirve de
+#   nada —la app vive en otro origen y nunca vería el token—, así que se vuelve
+#   por un enlace profundo que el sistema operativo enruta a la app.
+#
+# Por qué el login de la app NO puede pasar por el WebView, que es como estaba:
+# Google rechaza el flujo OAuth cuando detecta un navegador embebido y
+# responde `disallowed_useragent`. Es política suya desde hace años y no se
+# puede esquivar cambiando el user-agent (además de que hacerlo sería
+# exactamente lo que la política busca impedir). El flujo tiene que abrirse en
+# el navegador del sistema —Chrome Custom Tab en Android, SFSafariViewController
+# en iOS— y volver por el enlace profundo.
+#
+# El esquema es el appId de Capacitor, que es único por app en la tienda.
+ESQUEMA_APP = "com.matcher.app"
+DESTINO_APP = "app"
+DESTINO_WEB = "web"
+DESTINOS = (DESTINO_WEB, DESTINO_APP)
+
+
+def normalizar_destino(destino: str | None) -> str:
+    """Cualquier cosa que no sea exactamente "app" es la web.
+
+    Es una lista cerrada y no un parseo de URL a propósito: ver `url_de_vuelta`.
+    """
+    return DESTINO_APP if destino == DESTINO_APP else DESTINO_WEB
+
+
+def url_de_vuelta(base: str, destino: str, ruta: str, parametros: dict) -> str:
+    """La URL final del callback, ya con el token o el error adentro.
+
+    **El `destino` nunca se usa como URL.** Viaja firmado dentro del `state`,
+    así que el cliente no lo puede falsificar, pero igual se compara contra la
+    lista cerrada de arriba y la URL se arma acá. Tomar una URL del parámetro y
+    redirigir a ella sería un open redirect de manual: el atacante manda a la
+    víctima a su propio sitio y se lleva el token de sesión en la query.
+    """
+    consulta = urllib.parse.urlencode(parametros)
+    if normalizar_destino(destino) == DESTINO_APP:
+        return f"{ESQUEMA_APP}://auth{ruta}?{consulta}"
+    return f"{base.rstrip('/')}/#{ruta}?{consulta}"
+
 
 @dataclass(frozen=True)
 class Proveedor:
@@ -124,9 +173,9 @@ def _limpiar_consumidos(ahora: float) -> None:
             _CONSUMIDOS.pop(s, None)
 
 
-def nuevo_estado(destino: str = "/") -> str:
+def nuevo_estado(destino: str = DESTINO_WEB) -> str:
     _limpiar_consumidos(time.time())
-    return seguridad.firmar_datos({"d": destino})
+    return seguridad.firmar_datos({"d": normalizar_destino(destino)})
 
 
 def consumir_estado(s: str) -> str:
@@ -143,11 +192,12 @@ def consumir_estado(s: str) -> str:
     if s in _CONSUMIDOS:
         raise DatosInvalidos("el login expiró o el enlace ya se usó; probá de nuevo")
     _CONSUMIDOS[s] = ahora
-    destino = datos.get("d")
-    return destino if isinstance(destino, str) else "/"
+    return normalizar_destino(datos.get("d"))
 
 
-def url_de_autorizacion(nombre: str, base: str, destino: str = "/") -> tuple[str, str]:
+def url_de_autorizacion(
+    nombre: str, base: str, destino: str = DESTINO_WEB
+) -> tuple[str, str]:
     p = proveedor(nombre)
     if not p.configurado:
         raise DatosInvalidos(

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-import urllib.parse
 from datetime import date
 from pathlib import Path
 
@@ -388,7 +387,9 @@ def proveedores_de_login():
 
 
 @app.get("/api/auth/{nombre}/inicio")
-def iniciar_login(nombre: str, request: Request, destino: str = "/"):
+def iniciar_login(nombre: str, request: Request, destino: str = oauth.DESTINO_WEB):
+    """`destino=app` cuando el login sale de la app instalada: la vuelta va por
+    enlace profundo en vez de una página web (ver `oauth.url_de_vuelta`)."""
     url, estado = oauth.url_de_autorizacion(nombre, _base_publica(request), destino)
     return {"url": url, "state": estado}
 
@@ -401,14 +402,25 @@ def callback_login(
     state: str = "",
     error: str = "",
 ):
-    """Vuelta del proveedor. Termina siempre en una redirección al frontend:
-    con `#/entrar?token=…` si la cuenta ya existe, o con `#/completar?alta=…`
-    si es la primera vez y faltan datos."""
-    base = _base_publica(request)
-    if error:
-        return RedirectResponse(f"{base}/#/entrar?error={urllib.parse.quote(error)}")
+    """Vuelta del proveedor. Termina siempre en una redirección: a `/entrar`
+    con el token si la cuenta ya existe, o a `/completar` si es la primera vez.
 
-    oauth.consumir_estado(state)
+    A dónde va esa redirección lo decide el `destino` que viaja FIRMADO adentro
+    del `state` — la web del backend, o un enlace profundo a la app instalada.
+    Antes el valor que devolvía `consumir_estado` se descartaba y siempre se
+    volvía a la web: en el APK eso significaba que el login "funcionaba" pero
+    el token quedaba en el origen de la web y la app nunca se enteraba.
+    """
+    base = _base_publica(request)
+    # Si el `state` no se puede leer no hay destino confiable, así que el error
+    # vuelve por la web: es el único destino que no depende de datos del
+    # atacante.
+    if error:
+        return RedirectResponse(
+            oauth.url_de_vuelta(base, oauth.DESTINO_WEB, "/entrar", {"error": error})
+        )
+
+    destino = oauth.consumir_estado(state)
     acceso = oauth.intercambiar_codigo(nombre, code, base)
     datos = oauth.datos_del_usuario(nombre, acceso)
 
@@ -419,13 +431,15 @@ def callback_login(
         # Se vincula la identidad y se entra: obligar a poner la contraseña a
         # quien acaba de probar su email con Google no protege de nada.
         if not perfil.activo:
-            return RedirectResponse(f"{base}/#/entrar?error=cuenta_desactivada")
+            return RedirectResponse(
+                oauth.url_de_vuelta(base, destino, "/entrar", {"error": "cuenta_desactivada"})
+            )
         a.vincular_identidad(nombre, datos["email"], perfil.id)
         token = a.abrir_sesion(perfil)
-        return RedirectResponse(f"{base}/#/entrar?token={token}")
+        return RedirectResponse(oauth.url_de_vuelta(base, destino, "/entrar", {"token": token}))
 
     alta = a.guardar_alta_pendiente(nombre, datos["email"], datos["nombre"], datos["foto"])
-    return RedirectResponse(f"{base}/#/completar?alta={alta}")
+    return RedirectResponse(oauth.url_de_vuelta(base, destino, "/completar", {"alta": alta}))
 
 
 @app.get("/api/auth/alta/{token_alta}")
@@ -534,12 +548,18 @@ def apagar_disponible(perfil: Perfil = Depends(usuario)):
 
 
 @app.delete("/api/yo")
-def desactivar(perfil: Perfil = Depends(usuario)):
-    """Baja lógica. No se borra la fila: los matches del otro lado quedarían
-    apuntando a la nada y su chat se rompe."""
-    perfil.activo = False
-    almacen().guardar_perfil(perfil)
-    return {"ok": True}
+def borrar_cuenta(perfil: Perfil = Depends(usuario)):
+    """Borra la cuenta de verdad: datos personales, ubicación y sesiones.
+
+    Era una baja lógica (`activo = False`) y tenía dos problemas que aparecieron
+    en la auditoría: el email quedaba ocupado, así que la persona no podía
+    volver a registrarse NI entrar; y las dos tiendas exigen borrado real de
+    cuenta (Apple 5.1.1(v), Google Play), no una desactivación.
+
+    El detalle de qué se borra y qué se conserva está en `almacen.borrar_cuenta`.
+    """
+    almacen().borrar_cuenta(perfil)
+    return {"ok": True, "borrada": True}
 
 
 # ---------------------------------------------------------------------------

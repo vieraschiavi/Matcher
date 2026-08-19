@@ -154,18 +154,21 @@ def test_el_state_de_oauth_vale_en_otra_instancia(monkeypatch):
     """
     from matcher import oauth
 
-    estado = oauth.nuevo_estado("/planes")
+    # El `destino` es una lista cerrada ("web"/"app"), no una ruta libre: la
+    # ruta libre nunca se usó y era la forma de un open redirect. Lo que este
+    # test fija es otra cosa: que el estado firmado se lea en otra instancia.
+    estado = oauth.nuevo_estado(oauth.DESTINO_APP)
     # Otra instancia: proceso nuevo, memoria vacía.
     monkeypatch.setattr(oauth, "_CONSUMIDOS", {})
-    assert oauth.consumir_estado(estado) == "/planes"
+    assert oauth.consumir_estado(estado) == oauth.DESTINO_APP
 
 
 def test_el_state_sigue_siendo_de_un_solo_uso():
     from matcher import oauth
     from matcher.modelos import DatosInvalidos
 
-    estado = oauth.nuevo_estado("/")
-    assert oauth.consumir_estado(estado) == "/"
+    estado = oauth.nuevo_estado(oauth.DESTINO_WEB)
+    assert oauth.consumir_estado(estado) == oauth.DESTINO_WEB
     with pytest.raises(DatosInvalidos):
         oauth.consumir_estado(estado)
 

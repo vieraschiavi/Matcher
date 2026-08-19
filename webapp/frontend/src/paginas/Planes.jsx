@@ -3,6 +3,7 @@ import { t } from "../i18n";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../estado";
+import { hayQueExplicarElCobro, sePuedeCobrarAca } from "../cobroEnApp";
 import { avisar } from "../avisos";
 import { IcoRayo2 } from "../Iconos";
 
@@ -148,6 +149,16 @@ export default function Planes() {
         </div>
       )}
 
+      {/* Un botón deshabilitado sin explicación se lee como una app rota. Las
+          tiendas exigen su propio cobro para las suscripciones digitales, así
+          que la app instalada muestra los planes pero no vende. Ver
+          `cobroEnApp.js`. */}
+      {hayQueExplicarElCobro() && (
+        <div className="aviso aviso-info" style={{ marginTop: 12 }}>
+          {t("Los planes se contratan desde la web de Matcher, no desde la app: las tiendas exigen su propio sistema de cobro para las suscripciones. Si ya tenés un plan, funciona igual acá.")}
+        </div>
+      )}
+
       <div className="pestanas" style={{ maxWidth: 300 }}>
         <button className={periodo === "mensual" ? "on" : ""} onClick={() => setPeriodo("mensual")}>
           Mensual
@@ -208,12 +219,21 @@ export default function Planes() {
                   <button className="btn btn-bloque" onClick={cancelar}>
                     No renovar
                   </button>
-                ) : (
+                ) : sePuedeCobrarAca() ? (
                   <button
                     className="btn btn-primario btn-bloque"
                     onClick={() => comprar(pl.codigo)}
                   >
                     Pasar a {pl.nombre}
+                  </button>
+                ) : (
+                  // En la app instalada no se vende: las tiendas exigen su
+                  // propio cobro para las suscripciones digitales y una
+                  // pasarela propia adentro es rechazo seguro. Ver
+                  // `cobroEnApp.js`. El plan comprado en la web funciona igual
+                  // acá, así que esto no le saca nada a nadie.
+                  <button className="btn btn-bloque" disabled>
+                    Se contrata desde la web
                   </button>
                 )}
               </div>

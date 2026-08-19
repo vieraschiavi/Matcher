@@ -87,8 +87,13 @@ def test_url_de_autorizacion_lleva_lo_que_tiene_que_llevar(con_google):
 # state (CSRF)
 # ---------------------------------------------------------------------------
 def test_el_state_es_de_un_solo_uso():
-    s = oauth.nuevo_estado("/descubrir")
-    assert oauth.consumir_estado(s) == "/descubrir"
+    # El `destino` es una lista cerrada de dos valores ("web" y "app"), no una
+    # ruta libre. Antes aceptaba cualquier cadena y la devolvía tal cual; no lo
+    # usaba nadie (el frontend no lo mandaba y el callback descartaba el valor)
+    # y una ruta libre que después se usa para redirigir es exactamente la
+    # forma de un open redirect. Ver `oauth.url_de_vuelta`.
+    s = oauth.nuevo_estado(oauth.DESTINO_APP)
+    assert oauth.consumir_estado(s) == oauth.DESTINO_APP
     with pytest.raises(DatosInvalidos):
         oauth.consumir_estado(s)
 
@@ -275,3 +280,79 @@ def test_el_error_del_proveedor_no_filtra_el_secreto(monkeypatch, con_google):
     with pytest.raises(DatosInvalidos) as e:
         oauth.intercambiar_codigo("google", "codigo", "https://matcher.test")
     assert "secreto-de-prueba" not in str(e.value)
+
+
+# ---------------------------------------------------------------------------
+# Vuelta a la APP instalada (enlace profundo) vs. vuelta a la web
+# ---------------------------------------------------------------------------
+# El login desde el APK no puede volver a la web y ya se probó que no alcanza
+# con que "funcione": el WebView de la app vive en otro origen, así que el
+# token caía en el localStorage equivocado y la app seguía sin sesión. Y Google
+# directamente rechaza el flujo dentro de un WebView embebido
+# (`disallowed_useragent`), así que el navegador tiene que ser el del sistema.
+#
+# De ahí el `destino`: viaja firmado adentro del `state` y decide si la vuelta
+# es una URL web o el enlace profundo `com.matcher.app://auth/...`.
+def test_el_destino_app_vuelve_por_enlace_profundo(cliente, con_google, monkeypatch):
+    simular_proveedor(monkeypatch, "vieraschiavi@gmail.com", "Martín")
+    _, estado = oauth.url_de_autorizacion("google", "https://matcher.test", "app")
+    r = cliente.get(f"/api/auth/google/callback?code=abc&state={estado}")
+    destino = r.headers["location"]
+    assert destino.startswith(f"{oauth.ESQUEMA_APP}://auth/entrar?token=")
+    assert "matcher.test" not in destino, "el enlace de la app no puede apuntar a la web"
+
+
+def test_el_destino_web_sigue_volviendo_a_la_web(cliente, con_google, monkeypatch):
+    """El arreglo no puede romper el login del navegador, que es el que anda."""
+    simular_proveedor(monkeypatch, "vieraschiavi@gmail.com", "Martín")
+    _, estado = oauth.url_de_autorizacion("google", "https://matcher.test", "web")
+    r = cliente.get(f"/api/auth/google/callback?code=abc&state={estado}")
+    assert r.headers["location"].startswith("https://matcher.test/#/entrar?token=")
+
+
+def test_el_alta_desde_la_app_tambien_vuelve_por_enlace_profundo(
+    cliente, con_google, monkeypatch
+):
+    """El email nuevo manda a completar el alta. Si esa vuelta se fuera a la
+    web, el usuario terminaría llenando el formulario en el navegador y la app
+    quedaría esperando: el alta a medio hacer es justo donde más se nota."""
+    simular_proveedor(monkeypatch, "nuevo@ejemplo.test", "Nuevo")
+    _, estado = oauth.url_de_autorizacion("google", "https://matcher.test", "app")
+    r = cliente.get(f"/api/auth/google/callback?code=abc&state={estado}")
+    assert r.headers["location"].startswith(f"{oauth.ESQUEMA_APP}://auth/completar?alta=")
+
+
+def test_un_destino_arbitrario_no_es_un_open_redirect():
+    """El `destino` NUNCA se usa como URL. Si se aceptara una URL cualquiera,
+    un atacante mandaría a la víctima a su propio sitio con el token de sesión
+    en la query — que es el open redirect de manual."""
+    for veneno in (
+        "https://malicioso.example",
+        "//malicioso.example",
+        "javascript:alert(1)",
+        "app.malicioso.example",
+        "APP",
+        "",
+        None,
+    ):
+        url = oauth.url_de_vuelta("https://matcher.test", veneno, "/entrar", {"token": "x"})
+        assert url.startswith("https://matcher.test/#/entrar"), f"se coló: {veneno!r}"
+        assert "malicioso" not in url
+        assert "javascript" not in url
+
+
+def test_el_destino_no_se_puede_falsificar_desde_el_cliente(cliente, con_google, monkeypatch):
+    """El destino viaja firmado. Mandarlo por query en el callback no lo cambia:
+    lo único que manda es lo que se firmó al empezar el login."""
+    simular_proveedor(monkeypatch, "vieraschiavi@gmail.com", "Martín")
+    _, estado = oauth.url_de_autorizacion("google", "https://matcher.test", "web")
+    r = cliente.get(f"/api/auth/google/callback?code=abc&state={estado}&destino=app")
+    assert r.headers["location"].startswith("https://matcher.test/#/entrar")
+
+
+def test_el_inicio_acepta_el_destino_por_query(cliente, con_google):
+    """Es como lo pide la app: /api/auth/google/inicio?destino=app."""
+    r = cliente.get("/api/auth/google/inicio?destino=app")
+    assert r.status_code == 200
+    # El `state` devuelto tiene que traer el destino adentro, ya normalizado.
+    assert oauth.consumir_estado(r.json()["state"]) == oauth.DESTINO_APP
