@@ -1,4 +1,8 @@
-# Genera los paquetes descargables: el instalador de Windows y el APK.
+# Genera el instalador de Windows.
+#
+# El APK y el AAB NO se arman acá: los arma `apps.yml`, que además firma el
+# AAB si hay keystore cargado. Dos workflows compilando el mismo APK son el
+# doble de minutos y dos artefactos distintos con el mismo nombre.
 #
 # POR QUÉ ESTO EXISTE
 # El `.exe` pesa 77 MB. No entra en el repo (Git no es un servidor de
@@ -18,7 +22,7 @@
 # secretos CSC_LINK y CSC_KEY_PASSWORD en el repositorio y electron-builder los
 # toma solo.
 
-name: Paquetes
+name: Instalador de Windows
 
 on:
   workflow_dispatch:        # el botón "Run workflow" en la pestaña Actions
@@ -67,37 +71,3 @@ jobs:
              --title "Matcher ${GITHUB_REF_NAME}" --generate-notes --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  android:
-    name: APK de Android (debug)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Instalar dependencias
-        run: npm ci
-
-      - name: Compilar la app web y sincronizar
-        run: npm run sync:android
-        env:
-          VITE_API_URL: ${{ vars.MATCHER_URL_API }}
-
-      # `assembleDebug` y no `assembleRelease`: el release hay que firmarlo con
-      # la clave de publicación, que no está acá ni tiene que estar. Este APK
-      # sirve para probar en un teléfono, no para subir a Play Store.
-      - name: Armar el APK
-        working-directory: android
-        run: chmod +x gradlew && ./gradlew assembleDebug
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Matcher-android-debug
-          path: android/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error

@@ -288,7 +288,7 @@ los chats son los mismos abriendo el `.exe`, el teléfono o el navegador.
 Lo arma **GitHub Actions en una Windows de verdad**, gratis, con el workflow
 `.github/workflows/paquetes.yml`:
 
-1. Pestaña **Actions** → **Paquetes** → **Run workflow**.
+1. Pestaña **Actions** → **Instalador de Windows** → **Run workflow**.
 2. Cuando termina, el `.exe` queda como artefacto descargable de esa corrida.
 3. Para una URL estable (la que va en el botón de la web), etiquetá una versión:
 
@@ -305,7 +305,8 @@ Lo arma **GitHub Actions en una Windows de verdad**, gratis, con el workflow
    python3 -m marketing.generar_landing
    ```
 
-El mismo workflow arma el **APK de debug** de Android en paralelo.
+El **APK y el AAB** los arma el otro workflow, `apps.yml`, en cada push (y el
+AAB va firmado si cargaste el keystore en los secrets).
 
 También se puede armar a mano en una máquina con Windows:
 
