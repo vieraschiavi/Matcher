@@ -7,7 +7,7 @@ import { useApp } from "../estado";
 import { preferenciasEfectivas, soloPermitidos } from "../filtroCliente";
 import { IcoPin, IcoTrofeo } from "../Iconos";
 
-// Tres formas de encontrar gente sin swipear. Van juntas y no en pantallas
+// Cuatro formas de encontrar gente sin swipear. Van juntas y no en pantallas
 // separadas por una razón de navegación, no de código: la barra de arriba del
 // teléfono ya tiene cuatro botones y en 360 dp no entra un quinto sin que el
 // logo se parta. Son las tres "vitrinas" de la app, así que comparten sección.
@@ -36,6 +36,7 @@ export default function Ranking() {
   const [disponibles, setDisponibles] = useState(null);
   const [alcance, setAlcance] = useState("ciudad");
   const [likeados, setLikeados] = useState(null);
+  const [revancha, setRevancha] = useState(null);
   const [sugerencias, setSugerencias] = useState(null);
 
   const permitidas = preferenciasEfectivas(perfil?.preferencias);
@@ -83,13 +84,39 @@ export default function Ranking() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const cargarRevancha = useCallback(
+    () =>
+      api
+        .segundaVuelta()
+        .then((r) => setRevancha({ ...r, personas: soloPermitidos(permitidas, r.personas) }))
+        .catch(() => setRevancha({ dias_espera: 7, personas: [] })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
   useEffect(() => {
     if (pestana === "likeados") {
       setLikeados(null);
       cargarLikeados(alcance);
     }
+    if (pestana === "revancha" && revancha === null) cargarRevancha();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pestana, alcance]);
+
+  // Repescar no es un like común: primero borra el descarte viejo. Si sale un
+  // match, la persona que descartaste hace semanas te había dicho que sí — el
+  // mejor final posible de esta pantalla, y se festeja igual que cualquiera.
+  const darRevancha = async (id) => {
+    try {
+      const r = await api.repescar(id);
+      if (r.match) festejarMatch(r);
+      else avisar(t("Segunda oportunidad enviada"), { tipo: "ok", vibrar: 15 });
+      cargarRevancha();
+    } catch (e) {
+      if (e instanceof ErrorApi && e.sinCupo) navegar("/planes");
+      else avisar(e.message, { tipo: "error" });
+    }
+  };
 
   const darLike = async (id, recargar) => {
     try {
@@ -106,7 +133,7 @@ export default function Ranking() {
     <>
       <h1 className="page-title">{t("Explorar")}</h1>
       <p className="page-sub">
-        {t("Tres formas de encontrar gente sin deslizar. Todas respetan tus filtros.")}
+        {t("Cuatro formas de encontrar gente sin deslizar. Todas respetan tus filtros.")}
       </p>
 
       <div className="pestanas pestanas-tres">
@@ -125,7 +152,60 @@ export default function Ranking() {
         >
           {t("Top por zona")}
         </button>
+        <button
+          className={pestana === "revancha" ? "on" : ""}
+          onClick={() => setPestana("revancha")}
+        >
+          {t("2ª vuelta")}
+        </button>
       </div>
+
+      {/* ---------------- Segunda vuelta ---------------- */}
+      {pestana === "revancha" && (
+        <>
+          <p className="page-sub" style={{ marginTop: 12 }}>
+            {t("La gente que descartaste hace más de una semana y que hoy pasa tus filtros. El descarte con el pulgar en piloto automático no es una opinión: acá tenés la segunda mirada. Nadie se entera de que lo descartaste.")}
+          </p>
+          {revancha === null && <div className="esqueleto" style={{ height: 180 }} />}
+          {revancha?.personas.length === 0 && (
+            <div className="panel">
+              <p style={{ color: "var(--muted)", margin: 0 }}>
+                {t("No hay descartes viejos que pasen tus filtros. Los descartes entran acá a los 7 días.")}
+              </p>
+            </div>
+          )}
+          <div className="grid grid-3">
+            {revancha?.personas.map((p) => (
+              <div key={p.id} className="panel" style={{ padding: 0, overflow: "hidden" }}>
+                <img
+                  src={p.fotos?.[0]?.url}
+                  alt=""
+                  style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block" }}
+                />
+                <div style={{ padding: 13 }}>
+                  <b>
+                    {p.nombre}, {p.edad}
+                  </b>
+                  <div style={{ display: "flex", gap: 6, marginTop: 7, flexWrap: "wrap" }}>
+                    <span className="insignia insignia-auto">
+                      {t("hace")} {p.hace_dias} {t("días")}
+                    </span>
+                    <span className="insignia insignia-comp">{p.compatibilidad}%</span>
+                    {p.sintetico && <span className="insignia insignia-sint">Sintético</span>}
+                  </div>
+                  <button
+                    className="btn btn-primario btn-bloque"
+                    style={{ marginTop: 10 }}
+                    onClick={() => darRevancha(p.id)}
+                  >
+                    {t("Dar otra oportunidad")}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* ---------------- Disponible hoy ---------------- */}
       {pestana === "disponibles" && (

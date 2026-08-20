@@ -108,8 +108,10 @@ una fracción de lo que cobra la competencia.
 - Un solo CSS para web, Android e iOS: `webapp/frontend/src/theme.css`. El modo
   móvil es un `@media (max-width: 860px)` del mismo archivo, no una hoja
   aparte — dos hojas se desincronizan a la semana.
-- Los tokens de color base son los de Kobra (navy); el acento coral/violeta es
-  propio de Matcher. No inventar colores nuevos fuera de `:root`.
+- Paleta "carbón y fuego": base grafito neutra (sin tinte violeta — decisión
+  del dueño: la base violácea no le hablaba al público que quiere captar) y
+  acentos de fuego (`--coral` encendido y `--brasa`). No inventar colores
+  nuevos fuera de `:root`.
 
 ## Flujo de trabajo
 1. Cambio acotado.

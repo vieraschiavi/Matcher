@@ -145,6 +145,7 @@ RUTAS_QUE_LISTAN_GENTE = [
     # Las dos vitrinas nuevas. Los tres alcances van por separado porque cada
     # uno arma su propio universo y el filtro se podría escapar en uno solo.
     ("/api/disponibles", "personas"),
+    ("/api/segunda-vuelta", "personas"),
     ("/api/mas-likeados?alcance=mundo&limite=200", "top"),
     ("/api/mas-likeados?alcance=ciudad&limite=200", "top"),
     ("/api/mas-likeados?alcance=barrio&limite=200", "top"),

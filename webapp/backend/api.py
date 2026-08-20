@@ -37,6 +37,7 @@ from matcher import (
     planes,
     radar,
     scoring,
+    segundavuelta,
     seguridad,
     vitrinas,
 )
@@ -736,6 +737,21 @@ def disponibles(limite: int = 60, perfil: Perfil = Depends(usuario)):
     """Quién dijo que sale hoy. Ordenado por cercanía antes que por puntaje:
     en esta sección "está cerca" vale más que "es muy compatible"."""
     return vitrinas.disponibles_hoy(almacen(), perfil, limite=limite)
+
+
+@app.get("/api/segunda-vuelta")
+def segunda_vuelta(perfil: Perfil = Depends(usuario)):
+    """Los descartes viejos que hoy pasarían tus filtros. Mirar es gratis;
+    repescar gasta un like común (ver `matcher/segundavuelta.py`)."""
+    return {
+        "dias_espera": segundavuelta.DIAS_ESPERA,
+        "personas": segundavuelta.candidatos(almacen(), perfil),
+    }
+
+
+@app.post("/api/segunda-vuelta/{a_id}")
+def repescar(a_id: str, perfil: Perfil = Depends(usuario)):
+    return segundavuelta.repescar(almacen(), perfil, a_id)
 
 
 @app.get("/api/mas-likeados")

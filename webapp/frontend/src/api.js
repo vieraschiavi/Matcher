@@ -159,6 +159,8 @@ export const api = {
   citaACiegas: () => pedir("/aciegas", { metodo: "POST" }),
   topDia: () => pedir("/top-dia"),
   disponibles: (limite = 60) => pedir(`/disponibles?limite=${limite}`),
+  segundaVuelta: () => pedir("/segunda-vuelta"),
+  repescar: (a_id) => pedir(`/segunda-vuelta/${a_id}`, { metodo: "POST" }),
   masLikeados: (alcance = "ciudad", limite = 200) =>
     pedir(`/mas-likeados?alcance=${alcance}&limite=${limite}`),
   boost: () => pedir("/boost"),

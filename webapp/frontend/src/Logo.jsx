@@ -24,9 +24,9 @@ export default function Logo({ tam = 34, radio = 0.24, id = "logo" }) {
             gradiente en la misma página hacen que el navegador use el primero
             para los dos. */}
         <linearGradient id={`grad-${id}`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#ff5c7a" />
-          <stop offset="50%" stopColor="#f0407e" />
-          <stop offset="100%" stopColor="#8e5bef" />
+          <stop offset="0%" stopColor="#ff9a3d" />
+          <stop offset="50%" stopColor="#ff4655" />
+          <stop offset="100%" stopColor="#d81f3d" />
         </linearGradient>
       </defs>
       <rect width="100" height="100" rx={100 * radio} fill={`url(#grad-${id})`} />
