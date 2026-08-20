@@ -58,7 +58,7 @@ export default function Cruces() {
             <img
               src={p.fotos?.[0]?.url}
               alt=""
-              style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block" }}
+              className="foto-persona"
             />
             <div style={{ padding: 13 }}>
               <b>

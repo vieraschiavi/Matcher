@@ -39,6 +39,7 @@ from matcher import (
     scoring,
     segundavuelta,
     seguridad,
+    videollamada,
     vitrinas,
 )
 from matcher.almacen import Almacen, SinCupo
@@ -250,6 +251,14 @@ class Interaccion(BaseModel):
 
 class AltaMensaje(BaseModel):
     texto: str
+
+
+class AltaVideollamada(BaseModel):
+    proveedor: str
+    # Vacío cuando el proveedor crea la sala solo (Jitsi). Para Meet, Zoom y
+    # Webex es obligatorio y se valida contra el dominio del proveedor.
+    enlace: str = ""
+    cuando: str = ""
 
 
 class AltaCheckout(BaseModel):
@@ -821,6 +830,41 @@ def leer_chat(match_id: str, perfil: Perfil = Depends(usuario)):
 def escribir_chat(match_id: str, datos: AltaMensaje, perfil: Perfil = Depends(usuario)):
     m = almacen().enviar_mensaje(match_id, perfil, datos.texto)
     return {"mensaje": m.a_dict()}
+
+
+@app.get("/api/matches/{match_id}/videollamada")
+def ver_videollamada(match_id: str, perfil: Perfil = Depends(usuario)):
+    """Estado de la videollamada del chat + el catálogo de proveedores.
+
+    El `enlace` viene en null mientras la propuesta esté pendiente: hasta que
+    los dos aceptan, no existe para el cliente (ver `matcher/videollamada.py`).
+    """
+    return videollamada.estado(almacen(), perfil, match_id)
+
+
+@app.post("/api/matches/{match_id}/videollamada")
+def proponer_videollamada(
+    match_id: str, datos: AltaVideollamada, perfil: Perfil = Depends(usuario)
+):
+    return {
+        "llamada": videollamada.proponer(
+            almacen(), perfil, match_id, datos.proveedor, datos.enlace, datos.cuando
+        )
+    }
+
+
+@app.post("/api/videollamadas/{llamada_id}/responder")
+def responder_videollamada(
+    llamada_id: str,
+    acepta: bool = Body(embed=True),
+    perfil: Perfil = Depends(usuario),
+):
+    return {"llamada": videollamada.responder(almacen(), perfil, llamada_id, acepta)}
+
+
+@app.delete("/api/videollamadas/{llamada_id}")
+def cancelar_videollamada(llamada_id: str, perfil: Perfil = Depends(usuario)):
+    return {"llamada": videollamada.cancelar(almacen(), perfil, llamada_id)}
 
 
 @app.delete("/api/matches/{match_id}")

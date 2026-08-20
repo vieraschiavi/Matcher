@@ -14,7 +14,8 @@ una fracción de lo que cobra la competencia.
 - **Motor:** Python 3.11, sólo biblioteca estándar (`matcher/`)
 - **Backend:** FastAPI + uvicorn (`webapp/backend/api.py`), SQLite
 - **Frontend:** React 18 + Vite + react-router (HashRouter) (`webapp/frontend/`)
-- **Android/iOS:** Capacitor · **Tests:** pytest · **Lint:** ruff
+- **Android/iOS:** Capacitor · **Windows/PC:** Electron + electron-builder
+  (`electron/`, `electron-builder.yml`) · **Tests:** pytest · **Lint:** ruff
 
 ## Comandos
 | Acción | Comando |
@@ -27,6 +28,9 @@ una fracción de lo que cobra la competencia.
 | Sembrar demo | `python3 -m matcher.demo datos/matcher.db` |
 | APK debug | `npm run apk:debug` (necesita `ANDROID_HOME`) |
 | iOS | `npm run ios:abrir` (necesita macOS + Xcode) |
+| Programa de PC | `npm run pc` (abre la ventana sin empaquetar) |
+| Instalador Windows | `npm run pc:windows` (correr EN Windows) |
+| Kit de marca e íconos | `python3 -m marketing.generar_kit` |
 
 ## Reglas que no se rompen
 
@@ -100,9 +104,41 @@ una fracción de lo que cobra la competencia.
     alta a medio hacer vive en `altas_pendientes`, no como perfil incompleto:
     un perfil a medias se cuela en consultas que no lo esperan.
 
+12. **La videollamada la habilitan LOS DOS.** Una llamada muestra tu cara, tu
+    casa y tu voz: el link no existe para nadie —ni para quien la propuso—
+    hasta que la otra persona acepta. El servidor manda `enlace: null`
+    (`videollamada._a_dict`); no se manda tapado, no se manda. En una cita a
+    ciegas sin revelar está bloqueada, porque sería entregar por cámara la cara
+    que `aciegas.py` se cuida de no mandar. Y el link pegado se valida contra
+    el dominio del proveedor comparando el **host parseado**, anclado al final:
+    `meet.google.com.trucho.net` contiene el dominio bueno y no es el dominio
+    bueno. Sin eso, "proponer una videollamada" es un canal bendecido por la
+    app para mandar cualquier URL.
+    Y regla 10 otra vez: **Jitsi** la sala la crea Matcher (no hace falta cuenta
+    de nadie); **Meet, Zoom y Webex NO se pueden crear** sin las APIs de Google,
+    Zoom y Cisco con cuenta de organización — para esos la app pide el link que
+    la persona ya generó. No prometas una sala de Meet que la app no puede
+    crear.
+
+13. **El escritorio NO es una tienda.** Apple y Google exigen su pasarela; un
+    `.exe` que se baja de nuestra web no le paga comisión a nadie, así que en
+    Windows **sí se vende**. El programa carga con `file:`, igual que el APK, y
+    el respaldo por protocolo de `api.js` lo tomaría por app de tienda: con eso
+    el instalador de Windows queda sin botón de comprar, que es lo mismo que no
+    tener producto. Lo separa `window.matcherEscritorio`, que inyecta
+    `electron/preload.js`. Y la ventana no le da Node a la página
+    (`contextIsolation: true`): esta app pinta bios y links de desconocidos, y
+    con Node expuesto un XSS en una bio pasa a ser código en la máquina de la
+    persona. Todo esto lo fija `tests/test_escritorio.py`.
+
 ## Convenciones
 - Español rioplatense en el dominio y en los nombres de módulo, igual que
   MV Kobra AI y MV Cliente IA.
+- **Los íconos y el kit de marca se generan**, no se editan a mano:
+  `python3 -m marketing.generar_kit` los saca de la misma paleta que
+  `theme.css`. Estaban commiteados a mano y quedaron rosa y violeta cuando el
+  tema cambió a carbón y fuego: el ícono del escritorio era de otro producto
+  que la app que abría. Lo fija `tests/test_kit_marca.py`.
 - Comentarios que expliquen **por qué**, no qué. Los que están dicen qué falló
   antes — no los borres al refactorizar.
 - Un solo CSS para web, Android e iOS: `webapp/frontend/src/theme.css`. El modo

@@ -6,6 +6,7 @@ import { useApp } from "./estado";
 import { preferenciasEfectivas, soloPermitidos } from "./filtroCliente";
 import { alAvisar, alFestejarMatch, avisar, festejarMatch } from "./avisos";
 import FestejoMatch from "./componentes/FestejoMatch";
+import Paginador, { rebanar, totalPaginas } from "./componentes/Paginador";
 import { t } from "./i18n";
 import {
   IcoChat,
@@ -192,6 +193,7 @@ function Likes() {
   const navegar = useNavigate();
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState("");
+  const [pagina, setPagina] = useState(1);
 
   const cargar = () =>
     api
@@ -225,6 +227,14 @@ function Likes() {
 
   if (!datos) return <p className="page-sub">{t("Cargando…")}</p>;
 
+  // Al responder un like la persona sale de la lista, y si era la única de la
+  // última página quedaríamos parados en una página que ya no existe: pantalla
+  // en blanco sin explicación. Por eso la página se acota al total de AHORA y
+  // no se guarda como estado independiente de la lista.
+  const paginas = totalPaginas(datos.perfiles);
+  const paginaActual = Math.min(pagina, paginas);
+  const visibles = rebanar(datos.perfiles, paginaActual);
+
   return (
     <>
       <h1 className="page-title">{t("Te gustaron")}</h1>
@@ -244,12 +254,12 @@ function Likes() {
       )}
       {error && <div className="aviso aviso-error" style={{ marginBottom: 14 }}>{error}</div>}
       <div className="grid grid-3">
-        {datos.perfiles?.map((p) => (
+        {visibles.map((p) => (
           <div key={p.id} className="panel" style={{ padding: 0, overflow: "hidden" }}>
             <img
               src={p.fotos[0]?.url}
               alt=""
-              style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block" }}
+              className="foto-persona"
             />
             <div style={{ padding: 13 }}>
               <b>
@@ -260,7 +270,7 @@ function Likes() {
                 {p.tipo === "superfan" && <span className="insignia insignia-oro">Superfan</span>}
                 {p.sintetico && <span className="insignia insignia-sint">Sintético</span>}
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <div className="acciones-tarjeta" style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button className="btn btn-primario" style={{ flex: 1 }} onClick={() => responder(p.id, "like")}>
                   {t("Responder like")}
                 </button>
@@ -272,6 +282,7 @@ function Likes() {
           </div>
         ))}
       </div>
+      <Paginador pagina={paginaActual} total={paginas} onCambiar={setPagina} />
     </>
   );
 }

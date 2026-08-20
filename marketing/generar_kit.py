@@ -30,16 +30,20 @@ SALIDA = RAIZ / "marketing" / "kit"
 # ---------------------------------------------------------------------------
 # Paleta — los mismos valores que `webapp/frontend/src/theme.css`
 # ---------------------------------------------------------------------------
+# Carbón y fuego. La paleta vieja (base violácea + acento violeta) quedó fuera
+# por decisión del dueño; si estos valores se separan de `theme.css`, el ícono
+# del instalador y las piezas de redes salen de otro producto que la app.
+# `tests/test_kit_marca.py` compara los dos archivos y falla si se van.
 PALETA = {
-    "coral": "#ff4d6d",
-    "coral-deep": "#c9184a",
-    "violeta": "#8e5bef",
-    "azul": "#5b8def",
-    "navy-950": "#120d1c",
-    "navy-900": "#1a1226",
-    "navy-800": "#241a33",
-    "ink": "#fbf5f7",
-    "muted": "#b6a5c4",
+    "coral": "#ff4655",
+    "coral-deep": "#d81f3d",
+    "brasa": "#ff8a3d",
+    "azul": "#4d9fff",
+    "navy-950": "#0b1016",
+    "navy-900": "#111823",
+    "navy-800": "#1a2430",
+    "ink": "#f2f6f9",
+    "muted": "#9cadbd",
     "amber": "#f2b441",
     "green": "#7cc242",
 }
@@ -127,7 +131,7 @@ def _corazon_partido(d: ImageDraw.ImageDraw, cx: float, cy: float, r: float, col
 def logo(tam: int = 512, fondo: str | None = None, tinta: str = "blanco") -> Image.Image:
     img = Image.new("RGBA", (tam, tam), (0, 0, 0, 0))
     if fondo == "degradado":
-        img.paste(_degradado((tam, tam), PALETA["coral"], PALETA["violeta"]).convert("RGBA"), (0, 0))
+        img.paste(_degradado((tam, tam), PALETA["brasa"], PALETA["coral-deep"]).convert("RGBA"), (0, 0))
     elif fondo:
         img.paste(Image.new("RGBA", (tam, tam), _rgb(PALETA[fondo]) + (255,)), (0, 0))
 
@@ -223,10 +227,64 @@ def muestrario() -> Image.Image:
     return img
 
 
+def _redondear(img: Image.Image, radio_rel: float = 0.22) -> Image.Image:
+    """Esquinas redondeadas para el ícono de escritorio y de iOS.
+
+    Android y iOS recortan el ícono ellos mismos (y Play Store EXIGE que el
+    512×512 vaya cuadrado, sin máscara), pero Windows no recorta nada: el PNG
+    cuadrado se ve como un cuadrado duro al lado de los demás íconos de la
+    barra de tareas. Por eso el redondeo es una función aparte y no parte de
+    `logo()`.
+    """
+    tam = img.size[0]
+    mascara = Image.new("L", (tam, tam), 0)
+    ImageDraw.Draw(mascara).rounded_rectangle(
+        [0, 0, tam - 1, tam - 1], radius=round(tam * radio_rel), fill=255
+    )
+    salida = img.convert("RGBA")
+    salida.putalpha(mascara)
+    return salida
+
+
+def iconos_de_app() -> list[Path]:
+    """Los íconos que consumen los empaquetadores, desde el MISMO logo.
+
+    Estaban commiteados a mano con la paleta vieja (rosa y violeta), así que
+    después de cambiar el tema el ícono del escritorio pertenecía a otro
+    producto que la app que abría. Ahora salen de acá y se regeneran con el
+    resto del kit.
+    """
+    destino = RAIZ / "assets" / "marca"
+    destino.mkdir(parents=True, exist_ok=True)
+    base = logo(1024, tinta="blanco", fondo="degradado")
+    hechos = []
+
+    redondo = _redondear(base)
+    ruta = destino / "icono_1024.png"
+    redondo.save(ruta)
+    hechos.append(ruta)
+
+    # Play Store: 512×512, cuadrado y sin transparencia. Si va con esquinas
+    # redondeadas y alfa, la consola lo rechaza en la subida.
+    ruta = destino / "icono_play_512.png"
+    base.resize((512, 512), Image.LANCZOS).convert("RGB").save(ruta)
+    hechos.append(ruta)
+
+    # Windows: un solo .ico con todas las medidas adentro. Con una sola, el
+    # explorador escala a lo bruto y el ícono chico de la barra de tareas sale
+    # con los bordes sucios.
+    ruta = destino / "icono.ico"
+    redondo.save(ruta, sizes=[(s, s) for s in (16, 24, 32, 48, 64, 128, 256)])
+    hechos.append(ruta)
+    return hechos
+
+
 def generar() -> list[Path]:
     hechos: list[Path] = []
     for sub in ("logo", "redes", "paleta"):
         (SALIDA / sub).mkdir(parents=True, exist_ok=True)
+
+    hechos.extend(iconos_de_app())
 
     # -- logo -------------------------------------------------------------
     for nombre, kw in {
@@ -297,8 +355,8 @@ sin oscurecerla antes.
 |---|---|
 {filas}
 
-El navy es la base heredada de Kobra; el coral y el violeta son propios de
-Matcher. **No inventar colores fuera de esta tabla** — es la misma regla que
+La base grafito es la heredada de Kobra, neutralizada (sin tinte violeta);
+el coral encendido y la brasa son el acento propio de Matcher. **No inventar colores fuera de esta tabla** — es la misma regla que
 tiene la app en `theme.css`.
 
 ## Piezas de redes

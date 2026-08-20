@@ -32,16 +32,31 @@ import { Capacitor } from "@capacitor/core";
 //
 // `Capacitor.isNativePlatform()` es la API oficial y no depende del esquema. El
 // chequeo de protocolo queda de respaldo por si el global no está inyectado.
+//
+// ESCRITORIO (Electron/Windows) NO ES UNA TIENDA. El .exe se descarga de
+// nuestra web: Microsoft no cobra comisión ni exige pasarela propia, así que
+// ahí SÍ se vende, igual que en la web. Se detecta aparte porque carga con
+// `file:` y el respaldo de protocolo lo marcaría como app de tienda — y con
+// eso el programa de Windows quedaría sin botón de comprar, que es lo mismo
+// que no tener producto. Lo inyecta `electron/preload.js`.
+const ESCRITORIO = Boolean(
+  typeof window !== "undefined" && window.matcherEscritorio?.escritorio
+);
 const NATIVO = Boolean(
   Capacitor.isNativePlatform() ||
     // Respaldo por si el global no llegó a inyectarse: no cuesta nada y el
     // costo de equivocarse en esta bandera es un rechazo de tienda.
-    (typeof window !== "undefined" &&
+    (!ESCRITORIO &&
+      typeof window !== "undefined" &&
       /^(capacitor|ionic|file):/.test(window.location.protocol))
 );
 const CONFIGURADA = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
-export const BASE = CONFIGURADA || (NATIVO ? "https://api.matcher.app" : "");
+// El escritorio necesita URL absoluta por el mismo motivo que el APK: la app
+// se sirve desde el disco, no desde el backend, así que una ruta relativa
+// apuntaría al sistema de archivos.
+export const BASE = CONFIGURADA || (NATIVO || ESCRITORIO ? "https://api.matcher.app" : "");
 export const esNativo = NATIVO;
+export const esEscritorio = ESCRITORIO;
 
 const LLAVE = "matcher.token";
 
@@ -173,6 +188,18 @@ export const api = {
   mensajes: (id) => pedir(`/matches/${id}/mensajes`),
   enviar: (id, texto) => pedir(`/matches/${id}/mensajes`, { metodo: "POST", cuerpo: { texto } }),
   borrarMatch: (id) => pedir(`/matches/${id}`, { metodo: "DELETE" }),
+
+  // Videollamada del match. El `enlace` viene en null hasta que la otra
+  // persona acepta: no es que el cliente lo esconda, es que no lo recibe.
+  videollamada: (matchId) => pedir(`/matches/${matchId}/videollamada`),
+  proponerVideollamada: (matchId, proveedor, enlace = "", cuando = "") =>
+    pedir(`/matches/${matchId}/videollamada`, {
+      metodo: "POST",
+      cuerpo: { proveedor, enlace, cuando },
+    }),
+  responderVideollamada: (id, acepta) =>
+    pedir(`/videollamadas/${id}/responder`, { metodo: "POST", cuerpo: { acepta } }),
+  cancelarVideollamada: (id) => pedir(`/videollamadas/${id}`, { metodo: "DELETE" }),
   reportar: (a_id, motivo, detalle = "") =>
     pedir("/reportes", { metodo: "POST", cuerpo: { a_id, motivo, detalle } }),
 

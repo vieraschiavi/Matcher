@@ -1,0 +1,101 @@
+# Empaquetado de escritorio (Windows, Linux, macOS).
+#
+# Va en YAML y no en JSON porque JSON no tiene comentarios y electron-builder
+# rechaza cualquier clave que no conozca — el primer intento con un
+# "$comentario" adentro del JSON no compiló. Y en este repo los comentarios
+# valen: explican por qué está cada opción.
+#
+# Está en su propio archivo y no adentro de package.json porque ese
+# package.json es el de Capacitor (Android/iOS) y mezclar las dos
+# configuraciones obliga a leer cada cambio esquivando la otra.
+#
+# Lo que pidió el dueño, y qué opción lo hace:
+#   · instalador .exe ................. win.target = nsis
+#   · elegir dónde instalar ........... nsis.allowToChangeInstallationDirectory
+#   · icono en el escritorio .......... nsis.createDesktopShortcut
+#   · barra de programas (Inicio) ..... nsis.createStartMenuShortcut
+#   · desinstalador ................... lo genera NSIS solo; queda en
+#     "Agregar o quitar programas" con el ícono de la app
+#
+# OJO CON LA FIRMA: sin certificado, Windows SmartScreen muestra "editor
+# desconocido" la primera vez que alguien abre el instalador. No rompe nada,
+# pero espanta a la mitad de los que lo bajan. El certificado se compra aparte
+# y la clave NO va al repo: una clave de firma filtrada no se rota, hay que
+# revocar el certificado y comprar otro.
+
+appId: com.matcher.app
+productName: Matcher
+copyright: Matcher
+
+directories:
+  output: dist-escritorio
+  buildResources: assets/marca
+
+# Sólo lo que el programa necesita para correr. Sin esta lista entra el repo
+# entero al .exe: los tests, el motor de Python, las fotos del pack de caras y
+# los assets de marketing. Son decenas de megas que nadie va a abrir.
+files:
+  - electron/**/*
+  - webapp/frontend/dist/**/*
+  - assets/marca/icono.ico
+  - assets/marca/icono_1024.png
+  # Fuera node_modules ENTERO. electron-builder mete por su cuenta las
+  # dependencias de producción, y las de este package.json son las de Capacitor
+  # (@capacitor/android, @capacitor/ios): el SDK de Android con sus .dex y sus
+  # artefactos de build, viajando adentro del instalador de Windows. Se vio en
+  # el primer empaquetado — 2249 archivos en el asar, casi todos de Android.
+  # `electron/main.js` no requiere nada de npm: sólo `electron` y `path`, que
+  # los pone el runtime.
+  - "!node_modules/**/*"
+
+# El esquema propio es lo que deja que el login de Google vuelva al programa:
+# el navegador del sistema termina en `com.matcher.app://auth/...` y Windows
+# se lo entrega a esta app (lo recibe `electron/main.js`).
+protocols:
+  - name: Matcher
+    schemes:
+      - com.matcher.app
+
+win:
+  target:
+    - nsis
+  icon: assets/marca/icono.ico
+  artifactName: Matcher-${version}-instalador.${ext}
+
+nsis:
+  # oneClick: false es lo que convierte esto en un instalador con pantallas en
+  # vez de uno que se instala solo donde él quiere. Sin esto, "elegir dónde
+  # instalar" no existe: la opción de abajo se ignora.
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  # perMachine: false = se instala para el usuario actual y NO pide permisos de
+  # administrador. En una máquina del trabajo, pedir administrador es que la
+  # mitad de la gente no lo pueda instalar.
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Matcher
+  installerIcon: assets/marca/icono.ico
+  uninstallerIcon: assets/marca/icono.ico
+  installerHeaderIcon: assets/marca/icono.ico
+  installerLanguages:
+    - es_ES
+    - pt_BR
+    - en_US
+  language: "3082" # español
+  # Al desinstalar se borran los datos locales. Lo único que guarda el programa
+  # en la máquina es el token de sesión: dejarlo después de desinstalar, en una
+  # computadora compartida, es dejar la cuenta abierta para el que venga.
+  deleteAppDataOnUninstall: true
+
+linux:
+  target:
+    - AppImage
+  icon: assets/marca/icono_1024.png
+  category: Network
+
+mac:
+  target:
+    - dmg
+  icon: assets/marca/icono_1024.png
+  category: public.app-category.social-networking

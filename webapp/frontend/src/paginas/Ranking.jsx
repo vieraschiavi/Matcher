@@ -180,7 +180,7 @@ export default function Ranking() {
                 <img
                   src={p.fotos?.[0]?.url}
                   alt=""
-                  style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block" }}
+                  className="foto-persona"
                 />
                 <div style={{ padding: 13 }}>
                   <b>
@@ -232,7 +232,7 @@ export default function Ranking() {
                 <img
                   src={p.fotos?.[0]?.url}
                   alt=""
-                  style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block" }}
+                  className="foto-persona"
                 />
                 <div style={{ padding: 13 }}>
                   <b>
@@ -278,7 +278,7 @@ export default function Ranking() {
                 <img
                   src={p.fotos?.[0]?.url}
                   alt=""
-                  style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", display: "block" }}
+                  className="foto-persona"
                 />
                 <div style={{ padding: 13 }}>
                   <b>

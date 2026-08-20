@@ -185,6 +185,14 @@ export const IcoAntifaz = (p) => (
   </Svg>
 );
 
+// Cámara de video: la videollamada del match.
+export const IcoVideo = (p) => (
+  <Svg {...p}>
+    <rect x="2.8" y="6.4" width="12.4" height="11.2" rx="2.4" />
+    <path d="M15.2 10.6l4.3-2.6a.7.7 0 0 1 1.1.6v6.8a.7.7 0 0 1-1.1.6l-4.3-2.6Z" />
+  </Svg>
+);
+
 // Rayo: el boost.
 export const IcoRayo2 = ({ relleno = false, ...p }) => (
   <Svg {...p}>

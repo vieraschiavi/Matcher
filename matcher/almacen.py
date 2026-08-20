@@ -165,6 +165,22 @@ CREATE TABLE IF NOT EXISTS cruces (
     cerca_de TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (a_id, b_id)
 );
+-- Videollamada propuesta dentro de un match. El `enlace` se guarda desde la
+-- propuesta pero NO viaja al cliente hasta que la otra persona acepta: la
+-- decisión de mostrarlo es del servidor (ver `videollamada.py`).
+CREATE TABLE IF NOT EXISTS videollamadas (
+    id        TEXT PRIMARY KEY,
+    match_id  TEXT NOT NULL,
+    de_id     TEXT NOT NULL,
+    proveedor TEXT NOT NULL,
+    enlace    TEXT NOT NULL,
+    sala      TEXT NOT NULL DEFAULT '',
+    estado    TEXT NOT NULL,
+    cuando    TEXT NOT NULL DEFAULT '',
+    momento   TEXT NOT NULL,
+    resuelto  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_video_match ON videollamadas(match_id, momento);
 CREATE TABLE IF NOT EXISTS altas_pendientes (
     token     TEXT PRIMARY KEY,
     proveedor TEXT NOT NULL,
@@ -600,6 +616,13 @@ class Almacen:
             self.con.execute(f"DELETE FROM {tabla} WHERE usuario_id = ?", (perfil.id,))
         self.con.execute(
             "DELETE FROM identidades WHERE usuario_id = ?", (perfil.id,)
+        )
+        # Las videollamadas acordadas de todos sus matches: el que se va no
+        # deja atrás un link a una sala suya que el otro pueda seguir abriendo.
+        self.con.execute(
+            "DELETE FROM videollamadas WHERE match_id IN "
+            "(SELECT id FROM matches WHERE a_id = ? OR b_id = ?)",
+            (perfil.id, perfil.id),
         )
         # 2. Sesiones: se cierran todas, no sólo la actual.
         for fila in self.con.execute(
@@ -1065,6 +1088,10 @@ class Almacen:
     def deshacer_match(self, match_id: str, de: Perfil) -> None:
         self._match_de(match_id, de.id)
         self.con.execute("DELETE FROM mensajes WHERE match_id = ?", (match_id,))
+        # Si el match se deshace, la videollamada acordada se cae con él: un
+        # link que sigue vivo después de que alguien cortó el contacto es
+        # justamente lo que no queremos dejar dando vueltas.
+        self.con.execute("DELETE FROM videollamadas WHERE match_id = ?", (match_id,))
         self.con.execute("DELETE FROM matches WHERE id = ?", (match_id,))
         self.con.commit()
 

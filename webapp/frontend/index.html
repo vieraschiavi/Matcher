@@ -6,7 +6,29 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"
     />
-    <meta name="theme-color" content="#0a1020" />
+    <meta name="theme-color" content="#0b1016" />
+    <!--
+      Política de contenido. Lo pidió Electron a los gritos al empaquetar el
+      programa de escritorio, pero vale para las cuatro plataformas: esta app
+      pinta texto, fotos y links escritos por desconocidos, y sin CSP un XSS en
+      una bio pasa de ser un problema de la página a ejecutar código en la
+      ventana del programa instalado.
+
+      Lo que cierra, que es lo que importa:
+        · script-src 'self'  → no corre ningún script inyectado ni `eval`
+        · object-src / frame-src 'none' → nada de plugins ni iframes ajenos
+          (la videollamada se abre AFUERA, en el navegador del sistema)
+        · base-uri 'none' → no se puede reescribir la base de las URLs relativas
+
+      Lo que deja pasar, y por qué: `img-src https:` porque las fotos y los
+      tiles del mapa (cartocdn) son de terceros; `connect-src https:` porque la
+      URL de la API se configura al compilar y cambia entre web, APK y
+      escritorio; `style-src 'unsafe-inline'` por los estilos en línea de React.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https:; font-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'"
+    />
     <title>Matcher</title>
   </head>
   <body>

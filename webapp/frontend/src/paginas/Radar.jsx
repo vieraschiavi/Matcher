@@ -268,7 +268,7 @@ export default function Radar() {
               <img
                 src={seleccion.fotos?.[0]?.url}
                 alt=""
-                style={{ width: "100%", aspectRatio: "4/5", objectFit: "cover", borderRadius: 12, marginBottom: 10 }}
+                className="foto-persona" style={{ borderRadius: 12, marginBottom: 10 }}
               />
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                 <span className="insignia insignia-comp">{seleccion.compatibilidad}%</span>

@@ -143,6 +143,38 @@ demora días y es más quisquillosa que la de Google.
 
 ## 3. Play Store y App Store
 
+### Los links, en el orden en que se usan
+
+**Android — Google Play**
+
+| Qué | Link |
+|---|---|
+| Crear la cuenta de desarrollador (USD 25) | https://play.google.com/console/signup |
+| Consola, para subir el AAB y las capturas | https://play.google.com/console |
+| Requisitos de la ficha (íconos, capturas, textos) | https://support.google.com/googleplay/android-developer/answer/9866151 |
+| Formulario de Data Safety (obligatorio) | https://support.google.com/googleplay/android-developer/answer/10787469 |
+| Clasificación de contenido | https://support.google.com/googleplay/android-developer/answer/9859655 |
+| Política de apps de citas | https://support.google.com/googleplay/android-developer/answer/9877032 |
+| Política de pagos (por qué la app no vende) | https://support.google.com/googleplay/android-developer/answer/10281818 |
+| Firmar la app (Play App Signing) | https://support.google.com/googleplay/android-developer/answer/9842756 |
+
+**iOS — App Store**
+
+| Qué | Link |
+|---|---|
+| Inscribirse en Apple Developer (USD 99/año) | https://developer.apple.com/programs/enroll/ |
+| App Store Connect, para subir la build | https://appstoreconnect.apple.com |
+| Guías de revisión (la 3.1.1 es la del cobro) | https://developer.apple.com/app-store/review/guidelines/ |
+| Sign in with Apple: cuándo es obligatorio | https://developer.apple.com/app-store/review/guidelines/#sign-in-with-apple |
+| Privacidad de la ficha (nutrition labels) | https://developer.apple.com/app-store/app-privacy-details/ |
+| Medidas de las capturas | https://developer.apple.com/help/app-store-connect/reference/screenshot-specifications |
+| Small Business Program (comisión 15 % en vez de 30 %) | https://developer.apple.com/app-store/small-business-program/ |
+
+**Windows** — no hace falta ninguna tienda: el `.exe` se baja de tu propia web
+(ver la sección 5). Si algún día lo querés también en la Microsoft Store, la
+cuenta de desarrollador individual sale **USD 19, una sola vez**:
+https://partner.microsoft.com/dashboard/registration
+
 ### Costos, sin vueltas
 
 | Concepto | Costo | Frecuencia |
@@ -152,9 +184,15 @@ demora días y es más quisquillosa que la de Google.
 | Mac para compilar iOS | USD 600–1.400 | una vez (sirve una usada) |
 | Railway | USD 5 | por mes |
 | Dominio propio (opcional) | USD 10–15 | por año |
+| **Windows (.exe desde tu web)** | **USD 0** | — |
+| Certificado para firmar el .exe (opcional) | USD 200–400 | por año |
+| Microsoft Store (opcional, no hace falta) | USD 19 | una vez |
 
 **Total para salir en Android: USD 25 + USD 5/mes.**
 **Para salir también en iOS: + USD 99/año + una Mac.**
+**Windows no cuesta nada**: el instalador se publica en tu propia web. Sin
+certificado de firma, Windows muestra "editor desconocido" la primera vez —
+no bloquea la instalación, pero conviene saberlo antes de repartir el link.
 
 No hay forma de compilar ni firmar iOS sin una Mac. No es una limitación del
 proyecto, es de Apple.
@@ -238,7 +276,81 @@ web, y sumar Play Billing cuando haya facturación que justifique el trabajo.
 
 ---
 
-## 5. Lo que sigue sin resolverse, y es honesto decirlo
+## 5. Windows · el programa de escritorio
+
+La misma app React, en una ventana de escritorio. **No es un segundo
+producto**: carga exactamente el mismo `webapp/frontend/dist` que sirve la web
+y que empaqueta el APK, y habla con el mismo backend. La cuenta, los matches y
+los chats son los mismos abriendo el `.exe`, el teléfono o el navegador.
+
+### Cómo se genera el instalador
+
+Tiene que correrse **en una máquina con Windows** (NSIS y la firma de recursos
+son de Windows; desde Linux se puede empaquetar pero el ícono del ejecutable no
+se aplica bien):
+
+```bat
+git clone <el repo> && cd Matcher
+npm install
+set VITE_API_URL=https://TU-DOMINIO-DE-RAILWAY
+npm run pc:windows
+```
+
+Sale en `dist-escritorio\Matcher-1.0.0-instalador.exe`.
+
+`npm run pc` abre el programa sin empaquetar, para probarlo.
+
+### Lo que hace el instalador
+
+| Pedido | Cómo queda |
+|---|---|
+| Instalador `.exe` | Instalador con pantallas, en español (NSIS) |
+| Elegir dónde instalar | Pantalla de carpeta de destino, editable |
+| Ícono en el escritorio | Acceso directo "Matcher" |
+| Barra de programas | Entrada en el menú Inicio |
+| Desinstalador | En "Agregar o quitar programas", con el ícono de la app |
+
+No pide permisos de administrador: se instala para el usuario actual. En una
+máquina del trabajo, pedir administrador significa que la mitad de la gente no
+lo pueda instalar.
+
+Al desinstalar se borran los datos locales. Lo único que el programa guarda en
+la máquina es el token de sesión, y dejarlo después de desinstalar —en una
+computadora compartida— es dejarle la cuenta abierta al que venga después.
+
+### En Windows SÍ se vende
+
+Apple y Google exigen su pasarela; Microsoft no cobra nada por un `.exe` que se
+baja de tu web. Por eso el programa de escritorio **muestra el botón de comprar
+y cobra por las pasarelas de `matcher/pagos.py`**, con la comisión del ~5 % de
+la web en vez del 15 % de las tiendas.
+
+Esto costó un detalle fino: el programa carga con `file:`, y la detección de
+"app instalada" de `api.js` lo habría tomado por una app de tienda, dejándolo
+sin botón de comprar. Lo separa la bandera `matcherEscritorio` que inyecta
+`electron/preload.js`, y hay un test que lo fija
+(`tests/test_escritorio.py::test_el_escritorio_no_se_confunde_con_una_app_de_tienda`).
+
+### Seguridad de la ventana
+
+Una app de citas pinta bios, fotos y links escritos por desconocidos. La
+ventana corre con `contextIsolation: true` y `nodeIntegration: false`, la página
+no ve ningún módulo de Node, todo lo que puede tocar del sistema pasa por
+`electron/preload.js`, y cualquier link externo se abre en el navegador del
+sistema en vez de adentro de la ventana — si no, Matcher sería un navegador sin
+barra de direcciones, que es el escenario ideal para una pantalla de login
+falsa. Hay una CSP sin `unsafe-eval` en `webapp/frontend/index.html`.
+
+### Firma (opcional, pero conviene)
+
+Sin certificado, SmartScreen muestra "editor desconocido" la primera vez. No
+rompe nada, pero espanta a parte de los que lo bajan. El certificado se compra
+aparte y **la clave no va al repo**: una clave de firma filtrada no se rota, hay
+que revocar el certificado y comprar otro.
+
+---
+
+## 6. Lo que sigue sin resolverse, y es honesto decirlo
 
 1. **No hay moderación.** Hay reportes, no hay revisión. Una app de citas sin
    moderación de fotos y de chat se llena de abuso en la primera semana, y es
@@ -270,4 +382,4 @@ reportes, logout con revocación y borrado de cuenta.
 Además, la prueba que justifica todo esto: se crea una cuenta con foto, se
 **reinicia el servidor entero**, y la cuenta, la foto y la sesión siguen ahí.
 
-Y en el repo: **288 tests** verdes, `ruff` limpio.
+Y en el repo: **342 tests** verdes, `ruff` limpio.

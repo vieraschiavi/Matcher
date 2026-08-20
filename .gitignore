@@ -14,6 +14,10 @@ venv/
 node_modules/
 webapp/frontend/dist/
 
+# Empaquetado de escritorio (Electron). Son cientos de megas de Chromium: el
+# instalador se genera en la máquina que publica, no se versiona.
+dist-escritorio/
+
 # Capacitor: los proyectos nativos SÍ se commitean.
 #
 # Estaban ignorados y fue un error: para publicar en Play Store y App Store

@@ -3,6 +3,7 @@ import { t } from "../i18n";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { IcoAntifaz } from "../Iconos";
+import Videollamada from "../componentes/Videollamada";
 
 // Avatar de la lista y la cabecera. En una cita a ciegas sin revelar el
 // servidor manda `fotos: []` (regla 8: no viaja lo que no se puede ver), así
@@ -204,6 +205,12 @@ export default function Chat() {
                   </div>
                 </div>
               )}
+
+              {/* Arriba de las burbujas y no escondida en un menú: conocerse
+                  por cámara antes de verse en persona es una decisión de
+                  seguridad, y una decisión de seguridad que hay que buscar en
+                  un submenú no la toma nadie. */}
+              <Videollamada matchId={activo.id} nombre={activo.con.nombre} />
 
               <div className="burbujas">
                 {mensajes.length === 0 && (
