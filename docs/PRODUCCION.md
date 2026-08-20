@@ -285,20 +285,45 @@ los chats son los mismos abriendo el `.exe`, el teléfono o el navegador.
 
 ### Cómo se genera el instalador
 
-Tiene que correrse **en una máquina con Windows** (NSIS y la firma de recursos
-son de Windows; desde Linux se puede empaquetar pero el ícono del ejecutable no
-se aplica bien):
+Lo arma **GitHub Actions en una Windows de verdad**, gratis, con el workflow
+`.github/workflows/paquetes.yml`:
+
+1. Pestaña **Actions** → **Paquetes** → **Run workflow**.
+2. Cuando termina, el `.exe` queda como artefacto descargable de esa corrida.
+3. Para una URL estable (la que va en el botón de la web), etiquetá una versión:
+
+   ```bash
+   git tag v1.0.0 && git push origin v1.0.0
+   ```
+
+   Eso publica una Release con el instalador adjunto. Esa URL es la que se le
+   pasa a la web:
+
+   ```bash
+   MATCHER_URL_EXE=https://github.com/vieraschiavi/Matcher/releases/download/v1.0.0/Matcher-1.0.0-instalador.exe \
+   MATCHER_URL_APP=https://TU-DOMINIO \
+   python3 -m marketing.generar_landing
+   ```
+
+El mismo workflow arma el **APK de debug** de Android en paralelo.
+
+También se puede armar a mano en una máquina con Windows:
 
 ```bat
-git clone <el repo> && cd Matcher
 npm install
 set VITE_API_URL=https://TU-DOMINIO-DE-RAILWAY
 npm run pc:windows
 ```
 
 Sale en `dist-escritorio\Matcher-1.0.0-instalador.exe`.
-
 `npm run pc` abre el programa sin empaquetar, para probarlo.
+
+**Desde Linux también sale**, emulando con Wine (`wine`, `wine64` y
+`wine32:i386`), y así se generó y se verificó el primero. El ejecutable queda
+bien —ícono y textos de versión embebidos— pero el propio instalador no se
+puede *correr* completo bajo Wine: NSIS exige Windows de 64 bits y la
+emulación WOW64 no la satisface. Para probar la instalación de punta a punta
+hace falta una Windows.
 
 ### Lo que hace el instalador
 
@@ -350,7 +375,41 @@ que revocar el certificado y comprar otro.
 
 ---
 
-## 6. Lo que sigue sin resolverse, y es honesto decirlo
+## 6. La web pública
+
+`landing/` es un sitio estático en tres idiomas (es/pt/en) con el video de
+demostración, todas las funciones, las capturas, los planes y los botones de
+descarga. **Se genera**: `python3 -m marketing.generar_landing`.
+
+Los precios salen de `matcher/planes.py` —la misma fuente que cobra el
+checkout— así que la web no puede anunciar un plan que no existe. Los colores
+salen de `theme.css`. Los videos y las capturas salen de la app corriendo:
+
+```bash
+python3 -m uvicorn webapp.backend.api:app --port 8899   # en otra terminal
+node marketing/capturar.mjs                              # capturas reales
+python3 -m marketing.generar_video                       # 6 videos, es/pt/en
+python3 -m marketing.generar_landing                     # el sitio
+```
+
+Los botones de descarga se configuran por variables de entorno
+(`MATCHER_URL_APP`, `MATCHER_URL_EXE`, `MATCHER_URL_APK`). **Si falta una, el
+botón sale apagado y dice "en preparación"** en vez de linkear a un 404.
+
+Es estático: se sube a cualquier hosting (Netlify, Vercel, Cloudflare Pages,
+GitHub Pages) o se sirve desde el mismo Railway.
+
+Los videos **no tienen voz en off**. Se pidieron con voz femenina y no hay acá
+ninguna voz sintética que no suene a robot; poner ésa es peor que no poner
+ninguna. Están armados para leerse sin audio —que es como se mira la mayoría
+del video en redes— con el tiempo en pantalla calculado por largo de texto.
+Cuando haya una locutora o un TTS decente, se suma la pista sin rehacer la
+imagen. Tampoco llevan música: una pista con licencia dudosa es un reclamo de
+derechos en el primer video que ande bien.
+
+---
+
+## 7. Lo que sigue sin resolverse, y es honesto decirlo
 
 1. **No hay moderación.** Hay reportes, no hay revisión. Una app de citas sin
    moderación de fotos y de chat se llena de abuso en la primera semana, y es
@@ -382,4 +441,4 @@ reportes, logout con revocación y borrado de cuenta.
 Además, la prueba que justifica todo esto: se crea una cuenta con foto, se
 **reinicia el servidor entero**, y la cuenta, la foto y la sesión siguen ahí.
 
-Y en el repo: **342 tests** verdes, `ruff` limpio.
+Y en el repo: **358 tests** verdes, `ruff` limpio.

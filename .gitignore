@@ -53,3 +53,8 @@ Thumbs.db
 # El kit de marca se genera: `python3 -m marketing.generar_kit`. Se versiona el
 # generador, no las 36 imágenes de salida.
 marketing/kit/
+
+# Videos generados. Se regeneran con `python3 -m marketing.generar_video` a
+# partir de las capturas, que sí se versionan. Las copias que se publican
+# viven en landing/media/, que es lo que se sube al hosting.
+marketing/video/

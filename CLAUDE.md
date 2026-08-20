@@ -31,6 +31,9 @@ una fracción de lo que cobra la competencia.
 | Programa de PC | `npm run pc` (abre la ventana sin empaquetar) |
 | Instalador Windows | `npm run pc:windows` (correr EN Windows) |
 | Kit de marca e íconos | `python3 -m marketing.generar_kit` |
+| Capturas para la web | `node marketing/capturar.mjs` (con el backend arriba) |
+| Videos demo (es/pt/en) | `python3 -m marketing.generar_video` |
+| **Web pública** | `python3 -m marketing.generar_landing` |
 
 ## Reglas que no se rompen
 
@@ -134,6 +137,12 @@ una fracción de lo que cobra la competencia.
 ## Convenciones
 - Español rioplatense en el dominio y en los nombres de módulo, igual que
   MV Kobra AI y MV Cliente IA.
+- **La web pública (`landing/`) se GENERA**, no se edita a mano:
+  `python3 -m marketing.generar_landing`. Los precios salen de `matcher.planes`
+  —la misma fuente que cobra— y los colores de `theme.css`. Editar los tres
+  HTML a mano es perder el cambio en la próxima corrida, y a la semana el
+  precio del inglés deja de ser el del español. Lo fija `tests/test_landing.py`,
+  que además impide anunciar una función cuyo módulo no exista.
 - **Los íconos y el kit de marca se generan**, no se editan a mano:
   `python3 -m marketing.generar_kit` los saca de la misma paleta que
   `theme.css`. Estaban commiteados a mano y quedaron rosa y violeta cuando el

@@ -1,0 +1,103 @@
+# Genera los paquetes descargables: el instalador de Windows y el APK.
+#
+# POR QUÉ ESTO EXISTE
+# El `.exe` pesa 77 MB. No entra en el repo (Git no es un servidor de
+# descargas: un binario de 77 MB por versión infla el clon para siempre y no se
+# puede borrar del historial sin reescribirlo). Y el instalador de Windows se
+# arma bien en Windows: desde Linux hay que emular con Wine, y ahí el ícono del
+# ejecutable y la firma quedan a medias.
+#
+# Entonces lo arma esta máquina de GitHub, gratis, en una Windows de verdad, y
+# lo deja como archivo descargable. Con una etiqueta (`git tag v1.0.0 && git
+# push --tags`) además publica una Release, que es la URL estable que va en el
+# botón de descarga de la landing.
+#
+# NO FIRMA EL EJECUTABLE, y es a propósito: la clave de firma no puede vivir en
+# el repo ni pasar por acá sin un secreto configurado. Sin firma, Windows
+# muestra "editor desconocido" la primera vez. Para firmar, se cargan los
+# secretos CSC_LINK y CSC_KEY_PASSWORD en el repositorio y electron-builder los
+# toma solo.
+
+name: Paquetes
+
+on:
+  workflow_dispatch:        # el botón "Run workflow" en la pestaña Actions
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write           # hace falta para publicar la Release
+
+jobs:
+  windows:
+    name: Instalador de Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # La URL de la API se compila adentro del bundle: sin esto el programa
+      # instalado apunta al valor por defecto y no al backend real.
+      - name: Compilar la app web
+        run: npm run build:web
+        env:
+          VITE_API_URL: ${{ vars.MATCHER_URL_API }}
+
+      - name: Armar el instalador
+        run: npx electron-builder --win --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Matcher-windows
+          path: dist-escritorio/*.exe
+          if-no-files-found: error
+
+      - name: Publicar la Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        # `gh` viene instalado en el runner: no hace falta ninguna acción de
+        # terceros para publicar, y una acción de terceros con permiso de
+        # escritura sobre el repo es una dependencia que hay que auditar.
+        run: gh release create "${GITHUB_REF_NAME}" dist-escritorio/*.exe
+             --title "Matcher ${GITHUB_REF_NAME}" --generate-notes --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  android:
+    name: APK de Android (debug)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar la app web y sincronizar
+        run: npm run sync:android
+        env:
+          VITE_API_URL: ${{ vars.MATCHER_URL_API }}
+
+      # `assembleDebug` y no `assembleRelease`: el release hay que firmarlo con
+      # la clave de publicación, que no está acá ni tiene que estar. Este APK
+      # sirve para probar en un teléfono, no para subir a Play Store.
+      - name: Armar el APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Matcher-android-debug
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
