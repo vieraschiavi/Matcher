@@ -500,6 +500,11 @@ button { font-family: inherit; }
 .videollamada-cuando { margin: 0; font-size: 12.5px; color: var(--ink); font-weight: 650; }
 .videollamada-nota { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
 .videollamada-proveedores { display: flex; flex-wrap: wrap; gap: 7px; }
+/* Marca + nombre. Antes eran cuatro botones de puro texto, todos iguales, y no
+   se reconocía ninguno de un vistazo: reporte del dueño, "no aparece el ícono
+   de Zoom, Meet, Webex". */
+.chip-proveedor { display: inline-flex; align-items: center; gap: 7px; }
+.insignia-proveedor { display: inline-flex; align-items: center; gap: 5px; }
 .videollamada-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
 .videollamada-acciones .btn { flex: 1; min-width: 120px; }
 /* Aceptada: verde de "esto ya está", para que no se confunda con una propuesta

@@ -293,3 +293,79 @@ def test_por_http_el_match_de_otro_no_se_toca(cliente):
     cabeceras = entrar(cliente)
     r = cliente.get("/api/matches/inventado/videollamada", headers=cabeceras)
     assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Cómo se abre la llamada en el teléfono
+# ---------------------------------------------------------------------------
+def test_la_llamada_se_abre_con_un_intent_y_no_en_un_navegador_empotrado():
+    """En el teléfono, la reunión la tiene que atender la app de Zoom/Meet/Webex.
+
+    La primera versión abría el link con `Browser.open`, que en Android es una
+    Chrome Custom Tab: un navegador empotrado ADENTRO de Matcher. Ahí el link
+    de Zoom cae en la web de Zoom en vez de despertar la app de Zoom, y el
+    comentario que lo acompañaba ("el sistema la levanta él solo") era una
+    suposición, no algo comprobado.
+
+    `AppLauncher.openUrl` manda un Intent común: lo resuelve el sistema
+    operativo, así que abre la app instalada si la hay. El navegador queda
+    únicamente como respaldo.
+    """
+    from pathlib import Path
+
+    ruta = Path(__file__).resolve().parents[1] / "webapp" / "frontend" / "src"
+    fuente = (ruta / "componentes" / "Videollamada.jsx").read_text(encoding="utf-8")
+
+    assert "@capacitor/app-launcher" in fuente, "no se usa el lanzador del sistema"
+    assert "AppLauncher.openUrl" in fuente
+
+    # Se comparan las LLAMADAS, no las menciones: el comentario de arriba de la
+    # función nombra `Browser.open` para explicar por qué ya no va primero, y
+    # comparar texto crudo daba un fallo por esa mención.
+    import re
+
+    codigo = re.sub(r"/\*.*?\*/", "", fuente, flags=re.S)
+    codigo = re.sub(r"^\s*//.*$", "", codigo, flags=re.M)
+    # El respaldo tiene que ir DESPUÉS: si `Browser.open` se llamara primero,
+    # la app instalada no se abriría nunca.
+    assert codigo.index("AppLauncher.openUrl") < codigo.index("Browser.open({"), (
+        "el navegador empotrado se intenta antes que la app nativa"
+    )
+
+
+def test_cada_proveedor_se_reconoce_de_un_vistazo():
+    """Eran cuatro botones de puro texto y no se distinguía ninguno; el dueño
+    lo reportó como "no aparece el ícono de Zoom, Meet, Webex". Cada uno lleva
+    su marca de color.
+
+    NO son los logos oficiales a propósito: son marcas registradas ajenas y no
+    hay permiso de ninguno de los tres para reproducirlas."""
+    from pathlib import Path
+
+    ruta = Path(__file__).resolve().parents[1] / "webapp" / "frontend" / "src"
+    iconos = (ruta / "Iconos.jsx").read_text(encoding="utf-8")
+    vista = (ruta / "componentes" / "Videollamada.jsx").read_text(encoding="utf-8")
+
+    assert "LogoProveedor" in iconos and "LogoProveedor" in vista
+    for codigo in ("jitsi", "meet", "zoom", "webex"):
+        assert f'{codigo}:' in iconos, f"falta el color de {codigo}"
+    # Un color por proveedor, sin repetidos: si dos comparten color, volvemos a
+    # no distinguirlos.
+    import re
+
+    bloque = iconos.split("COLOR_PROVEEDOR = {")[1].split("};")[0]
+    colores = re.findall(r'"(#[0-9a-fA-F]{6})"', bloque)
+    assert len(colores) == 4 and len(set(colores)) == 4, f"colores repetidos: {colores}"
+
+
+def test_el_boton_avisa_que_la_llamada_se_abre_afuera():
+    """Si el botón dijera sólo "entrar", la persona espera que pase algo dentro
+    de Matcher y de golpe le cambia de aplicación."""
+    from pathlib import Path
+
+    vista = (
+        Path(__file__).resolve().parents[1]
+        / "webapp" / "frontend" / "src" / "componentes" / "Videollamada.jsx"
+    ).read_text(encoding="utf-8")
+    assert "Se abre en la app de" in vista
+    assert "si la tenés instalada; si no, en el navegador." in vista

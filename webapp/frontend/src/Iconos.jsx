@@ -193,6 +193,47 @@ export const IcoVideo = (p) => (
   </Svg>
 );
 
+// Marca de cada proveedor de videollamada.
+//
+// NO son los logos oficiales, y es a propósito: reproducir el logotipo de
+// Zoom, Google Meet o Webex adentro de otro producto es usar una marca
+// registrada ajena, y no tenemos permiso de ninguno de los tres. Lo que se usa
+// es la pastilla de color de cada uno con el ícono de cámara: alcanza para
+// reconocerlos de un vistazo —que era el problema, se veían cuatro botones de
+// texto todos iguales— sin apropiarse de la marca. El nombre va al lado.
+const COLOR_PROVEEDOR = {
+  jitsi: "#1e6bb8",
+  meet: "#00832d",
+  zoom: "#2d8cff",
+  webex: "#00bceb",
+};
+
+export const LogoProveedor = ({ codigo, tam = 18 }) => (
+  <span
+    aria-hidden="true"
+    style={{
+      width: tam,
+      height: tam,
+      borderRadius: Math.round(tam * 0.3),
+      background: COLOR_PROVEEDOR[codigo] || "var(--faint)",
+      display: "inline-grid",
+      placeItems: "center",
+      flex: "none",
+      color: "#fff",
+    }}
+  >
+    <svg
+      width={Math.round(tam * 0.64)}
+      height={Math.round(tam * 0.64)}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+    >
+      <rect x="2.5" y="7" width="12" height="10" rx="2.2" />
+      <path d="M15.6 11l4.2-2.5a.6.6 0 0 1 .9.5v6a.6.6 0 0 1-.9.5L15.6 13Z" />
+    </svg>
+  </span>
+);
+
 // Rayo: el boost.
 export const IcoRayo2 = ({ relleno = false, ...p }) => (
   <Svg {...p}>

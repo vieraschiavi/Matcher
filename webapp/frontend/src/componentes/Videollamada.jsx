@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
+import { AppLauncher } from "@capacitor/app-launcher";
 import { Browser } from "@capacitor/browser";
 
 import { api, esNativo } from "../api";
-import { IcoVideo } from "../Iconos";
+import { IcoVideo, LogoProveedor } from "../Iconos";
 import { t } from "../i18n";
 
 /**
@@ -17,20 +18,42 @@ import { t } from "../i18n";
  *   sacarlo aunque quisiera. Es la regla 9 del producto: lo que decide el
  *   servidor no lo esconde el cliente.
  * - **No abre la llamada adentro de la app.** Meet, Zoom y Webex piden cámara
- *   y micrófono, y un WebView embebido o los rechaza o los concede con un
- *   permiso que el usuario le dio a Matcher, no a Zoom. Se abre el navegador
- *   del sistema (o la app de Zoom/Meet si está instalada, que es lo que hace
- *   el sistema operativo con esos links).
+ *   y micrófono, y no se pueden empotrar: sus clientes web bloquean el iframe
+ *   y sus SDK nativos exigen cuenta de organización. La llamada la atiende la
+ *   app de ellos, que es la que la persona ya tiene instalada y con los
+ *   permisos dados a ELLOS, no a Matcher.
  */
-function abrir(url) {
-  if (esNativo) {
-    // `Browser.open` en la app = Chrome Custom Tab / SFSafariViewController.
-    // Si el teléfono tiene la app de Zoom o Meet instalada, el sistema la
-    // levanta él solo con ese link.
-    Browser.open({ url }).catch(() => window.open(url, "_blank", "noopener"));
+
+/**
+ * Abre la reunión FUERA de Matcher.
+ *
+ * El orden importa y antes estaba mal. La primera versión usaba
+ * `Browser.open`, que en Android es una Chrome Custom Tab: un navegador
+ * empotrado adentro de la app. Ahí el link de Zoom cae en la web de Zoom en
+ * vez de despertar la app de Zoom, y el comentario que decía "el sistema la
+ * levanta él solo" era optimismo, no algo verificado.
+ *
+ * `AppLauncher.openUrl` manda un Intent común y silvestre: es el sistema
+ * operativo el que resuelve quién abre ese link, así que si la app de Zoom,
+ * Meet o Webex está instalada, la abre ella. Si no hay ninguna app que lo
+ * reclame, se cae al navegador, que es exactamente lo que uno quiere.
+ */
+async function abrir(url) {
+  if (!esNativo) {
+    window.open(url, "_blank", "noopener,noreferrer");
     return;
   }
-  window.open(url, "_blank", "noopener,noreferrer");
+  try {
+    const r = await AppLauncher.openUrl({ url });
+    if (r?.completed) return;
+  } catch {
+    /* sin app que lo reclame: sigue el navegador */
+  }
+  try {
+    await Browser.open({ url });
+  } catch {
+    window.open(url, "_blank", "noopener");
+  }
 }
 
 export default function Videollamada({ matchId, nombre }) {
@@ -90,12 +113,19 @@ export default function Videollamada({ matchId, nombre }) {
         <div className="videollamada-cabeza">
           <IcoVideo tam={17} />
           <b>{t("Videollamada acordada")}</b>
-          <span className="insignia insignia-auto">{llamada.proveedor_nombre}</span>
+          <span className="insignia insignia-auto insignia-proveedor">
+            <LogoProveedor codigo={llamada.proveedor} tam={14} />
+            {llamada.proveedor_nombre}
+          </span>
         </div>
         {llamada.cuando && <p className="videollamada-cuando">{llamada.cuando}</p>}
+        <p className="videollamada-nota">
+          {t("Se abre en la app de")} {llamada.proveedor_nombre}{" "}
+          {t("si la tenés instalada; si no, en el navegador.")}
+        </p>
         <div className="videollamada-acciones">
           <button className="btn btn-primario" onClick={() => abrir(llamada.enlace)}>
-            {t("Entrar a la llamada")}
+            {t("Abrir la llamada")} ↗
           </button>
           <button
             className="btn btn-fantasma"
@@ -119,7 +149,10 @@ export default function Videollamada({ matchId, nombre }) {
               ? t("Propusiste una videollamada")
               : `${nombre} ${t("te propone una videollamada")}`}
           </b>
-          <span className="insignia insignia-auto">{llamada.proveedor_nombre}</span>
+          <span className="insignia insignia-auto insignia-proveedor">
+            <LogoProveedor codigo={llamada.proveedor} tam={14} />
+            {llamada.proveedor_nombre}
+          </span>
         </div>
         {llamada.cuando && <p className="videollamada-cuando">{llamada.cuando}</p>}
         <p className="videollamada-nota">
@@ -176,13 +209,14 @@ export default function Videollamada({ matchId, nombre }) {
             {datos.proveedores.map((p) => (
               <button
                 key={p.codigo}
-                className={`chip ${p.codigo === proveedor ? "on" : ""}`}
+                className={`chip chip-proveedor ${p.codigo === proveedor ? "on" : ""}`}
                 onClick={() => {
                   setProveedor(p.codigo);
                   setEnlace("");
                   setError("");
                 }}
               >
+                <LogoProveedor codigo={p.codigo} />
                 {p.nombre}
               </button>
             ))}
