@@ -134,6 +134,28 @@ una fracción de lo que cobra la competencia.
     con Node expuesto un XSS en una bio pasa a ser código en la máquina de la
     persona. Todo esto lo fija `tests/test_escritorio.py`.
 
+14. **Un plan no se activa sin que la pasarela diga que la plata entró.**
+    `pagos.confirmar` le pregunta a la pasarela (`esta_pagado`) ANTES de dar de
+    alta nada. Sin ese chequeo —y así estuvo— cualquiera con una cuenta pedía
+    un checkout de Gold, llamaba a `/api/pagos/confirmar` a mano y se quedaba
+    con el plan sin pagar un peso. Ojo con la trampa que me comí: una auditoría
+    que hace checkout→confirmar y ve el plan activo **no prueba que los pagos
+    funcionen**, prueba que el agujero está abierto. Lo fija
+    `tests/test_pagos_verificados.py`.
+    Y cada pasarela lee su propia notificación (`referencia_de_notificacion`):
+    MercadoPago avisa `{"data": {"id": …}}` SIN mandar nuestra referencia, así
+    que hay que ir a buscar el pago a su API. Con el `or` encadenado que había
+    antes, el webhook no encontraba nada y **el plan no se activaba nunca**.
+
+15. **Matcher no vende licencias, vende suscripción.** No hay archivo de
+    licencia ni clave de activación: pagar levanta el PLAN de la cuenta en el
+    servidor, y ese plan te sigue a la web, al APK y al `.exe` con sólo entrar.
+    Las descargas son libres. Si alguien pide "la licencia del cliente", la
+    respuesta es su cuenta. Las cuentas del dueño se listan en
+    `MATCHER_CUENTAS_DUENIO` (ver `matcher/duenio.py`): vacía por defecto, sin
+    comodines, y **no inventa un pago** — la contabilidad sigue mostrando sólo
+    lo que se cobró de verdad.
+
 ## Convenciones
 - Español rioplatense en el dominio y en los nombres de módulo, igual que
   MV Kobra AI y MV Cliente IA.

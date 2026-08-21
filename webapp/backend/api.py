@@ -29,6 +29,7 @@ from matcher import (
     cruces,
     crushtime,
     demo,
+    duenio,
     filtros,
     geo,
     medios,
@@ -145,6 +146,17 @@ def usuario_opcional(authorization: str = Header(default="")) -> Perfil | None:
 @app.exception_handler(DatosInvalidos)
 async def _datos_invalidos(_: Request, exc: DatosInvalidos):
     return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(pagos.PagoNoAcreditado)
+async def _pago_no_acreditado(_: Request, exc: pagos.PagoNoAcreditado):
+    """409 y no 400: no es un dato mal mandado, es "la plata todavía no
+    figura". El frontend ofrece reintentar en vez de un error definitivo.
+
+    Va ANTES del handler de DatosInvalidos porque hereda de él: FastAPI elige
+    por el tipo exacto, pero dejarlo abajo invita a que alguien reordene y lo
+    tape sin darse cuenta."""
+    return JSONResponse(status_code=409, content={"detail": str(exc), "reintentable": True})
 
 
 @app.exception_handler(SinCupo)
@@ -373,6 +385,10 @@ def login(datos: Credenciales):
         # convierte el login en un enumerador de cuentas.
         raise HTTPException(401, "email o contraseña incorrectos")
     perfil, token = sesion
+    # Las cuentas del dueño quedan en Gold sin pasar por la caja. La lista sale
+    # de una variable de entorno y viene vacía por defecto: sin configurarla,
+    # esto no hace absolutamente nada (ver `matcher/duenio.py`).
+    duenio.aplicar(almacen(), perfil)
     return {"token": token, "perfil": perfil.a_dict(privado=True)}
 
 
@@ -932,18 +948,18 @@ async def _webhook(request: Request, nombre_pasarela: str) -> JSONResponse:
     except json.JSONDecodeError:
         raise HTTPException(400, "cuerpo inválido") from None
 
-    # Cada proveedor manda "cuál es mi pago" en un lugar distinto del cuerpo.
-    referencia = (
-        datos.get("external_reference")  # MercadoPago (cuando viene en el payload)
-        or datos.get("order_id")  # dLocal
-        or next(
-            (
-                u.get("reference_id")
-                for u in datos.get("resource", {}).get("purchase_units", [])  # PayPal
-            ),
-            None,
-        )
-    )
+    # Cada proveedor manda "cuál es mi pago" en un lugar distinto, y
+    # MercadoPago directamente no lo manda: avisa `{"data": {"id": …}}` y hay
+    # que ir a buscarlo a su API. Antes esto era un `or` encadenado acá que no
+    # contemplaba ese caso, así que con MercadoPago **el plan no se activaba
+    # nunca**: el handler no encontraba referencia y respondía
+    # "procesado: false". Ahora cada pasarela sabe leer su propia notificación.
+    try:
+        referencia = pasarela.referencia_de_notificacion(datos)
+    except DatosInvalidos:
+        # No se pudo consultar al proveedor (credenciales, red). Se responde
+        # 200 para que reintente más tarde en vez de darlo por perdido.
+        return JSONResponse({"ok": True, "procesado": False, "motivo": "sin_consulta"})
     if not referencia:
         # No es un error del cliente: es un evento que este webhook no sabe
         # interpretar (p.ej. una notificación de MercadoPago que sólo trae el

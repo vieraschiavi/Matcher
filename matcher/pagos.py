@@ -32,6 +32,7 @@ import hmac
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
@@ -41,6 +42,15 @@ from . import planes
 from .modelos import DatosInvalidos, Perfil
 
 PERIODOS = ("mensual", "anual")
+
+
+class PagoNoAcreditado(DatosInvalidos):
+    """La pasarela todavía no dice que la plata entró.
+
+    No es un error del usuario ni un dato inválido: es "esperá". Tiene clase
+    propia para que la API lo traduzca a 409 y el frontend pueda ofrecer
+    "reintentar" en vez de mostrar un error rojo definitivo.
+    """
 
 
 @dataclass
@@ -106,6 +116,35 @@ class Pasarela:
     def verificar_webhook(self, cuerpo: bytes, cabeceras: dict) -> bool:  # pragma: no cover
         raise NotImplementedError
 
+    def esta_pagado(self, referencia: str, referencia_externa: str) -> bool:  # pragma: no cover
+        """¿La plata entró de verdad?
+
+        LA FUNCIÓN MÁS IMPORTANTE DE ESTE ARCHIVO. Antes no existía:
+        `/api/pagos/confirmar` daba el plan de alta con sólo recibir una
+        referencia, sin preguntarle nada al proveedor. Con eso, cualquiera con
+        una cuenta hacía esto y se quedaba con Gold gratis:
+
+            POST /api/pagos/checkout  {"plan": "gold"}   -> referencia
+            POST /api/pagos/confirmar {"referencia": …}  -> Gold activado
+
+        Y no hacía falta ni pagar. En modo `demo` da igual —no hay plata de por
+        medio— pero apenas se enchufa MercadoPago es la caja abierta.
+
+        Ahora nadie recibe un plan sin que la pasarela diga que sí.
+        """
+        raise NotImplementedError
+
+    def referencia_de_notificacion(self, datos: dict) -> str | None:  # pragma: no cover
+        """Del cuerpo del webhook, sacar CUÁL de nuestros cobros es.
+
+        Cada proveedor lo manda en un lugar distinto, y MercadoPago
+        directamente no lo manda: avisa `{"data": {"id": …}}` y hay que ir a
+        buscar el pago a su API para saber a qué `external_reference`
+        corresponde. Por eso esto es un método de la pasarela y no un `or`
+        encadenado en el handler.
+        """
+        raise NotImplementedError
+
 
 class PasarelaDemo(Pasarela):
     """Confirma en el acto. Es la que usa la demo y los tests.
@@ -123,6 +162,15 @@ class PasarelaDemo(Pasarela):
 
     def verificar_webhook(self, cuerpo: bytes, cabeceras: dict) -> bool:
         return True
+
+    def esta_pagado(self, referencia: str, referencia_externa: str) -> bool:
+        """Siempre sí, porque no hay plata que verificar. Es LEGÍTIMO acá y
+        sería una catástrofe en cualquier otra pasarela: por eso la decisión
+        vive en cada clase y no en un `if nombre == "demo"` suelto por ahí."""
+        return True
+
+    def referencia_de_notificacion(self, datos: dict) -> str | None:
+        return datos.get("external_reference")
 
 
 class PasarelaMercadoPago(Pasarela):
@@ -197,6 +245,49 @@ class PasarelaMercadoPago(Pasarela):
         manifest = f"id:{datos.get('data', {}).get('id', '')};request-id:{id_pedido};ts:{ts};"
         esperado = hmac.new(secreto.encode(), manifest.encode(), hashlib.sha256).hexdigest()
         return hmac.compare_digest(esperado, v1)
+
+    def _buscar_pagos(self, referencia: str) -> list[dict]:
+        """Los pagos de MercadoPago que apuntan a ESTE cobro nuestro.
+
+        Se busca por `external_reference` —nuestra referencia— y no por el id
+        de la preferencia: una preferencia puede terminar en varios intentos de
+        pago (uno rechazado, otro aprobado), y lo que importa es si ALGUNO
+        quedó aprobado.
+        """
+        token = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
+        if not token:
+            raise DatosInvalidos("falta MERCADOPAGO_ACCESS_TOKEN")
+        r = _pedir(
+            f"{self.API}/v1/payments/search?external_reference={urllib.parse.quote(referencia)}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        return r.get("results") or []
+
+    def esta_pagado(self, referencia: str, referencia_externa: str) -> bool:
+        return any(p.get("status") == "approved" for p in self._buscar_pagos(referencia))
+
+    def referencia_de_notificacion(self, datos: dict) -> str | None:
+        """MercadoPago avisa `{"type": "payment", "data": {"id": "123"}}` y NO
+        manda la referencia nuestra. Hay que ir a buscar ese pago a su API.
+
+        Esto faltaba y era un agujero funcional entero: el handler no
+        encontraba referencia, respondía "procesado: false" y **el plan nunca
+        se activaba**. Quien pagaba y cerraba el navegador se quedaba sin nada.
+        """
+        directa = datos.get("external_reference")
+        if directa:
+            return directa
+        id_pago = str(datos.get("data", {}).get("id") or "")
+        if not id_pago:
+            return None
+        token = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
+        if not token:
+            return None
+        pago = _pedir(
+            f"{self.API}/v1/payments/{urllib.parse.quote(id_pago)}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        return pago.get("external_reference") or None
 
 
 class PasarelaPayPal(Pasarela):
@@ -301,6 +392,27 @@ class PasarelaPayPal(Pasarela):
         )
         return r.get("verification_status") == "SUCCESS"
 
+    def esta_pagado(self, referencia: str, referencia_externa: str) -> bool:
+        """La orden tiene que estar COMPLETED. `APPROVED` NO alcanza: quiere
+        decir que la persona apretó el botón pero la plata todavía no se
+        capturó, y una orden aprobada puede quedar sin capturar para siempre."""
+        if not referencia_externa:
+            return False
+        r = _pedir(
+            f"{self._base}/v2/checkout/orders/{urllib.parse.quote(referencia_externa)}",
+            headers={"Authorization": f"Bearer {self._token()}"},
+        )
+        return r.get("status") == "COMPLETED"
+
+    def referencia_de_notificacion(self, datos: dict) -> str | None:
+        return next(
+            (
+                u.get("reference_id")
+                for u in datos.get("resource", {}).get("purchase_units", [])
+            ),
+            None,
+        )
+
 
 class PasarelaDLocal(Pasarela):
     """Payments API de dLocal, pensada para tarjetas y medios locales de
@@ -371,6 +483,37 @@ class PasarelaDLocal(Pasarela):
             return False
         esperado = hmac.new(secreto.encode(), cuerpo or b"", hashlib.sha256).hexdigest()
         return hmac.compare_digest(esperado, firma.replace("hmac ", "").strip())
+
+    def esta_pagado(self, referencia: str, referencia_externa: str) -> bool:
+        """dLocal marca `PAID` cuando la plata está. `AUTHORIZED` es sólo una
+        retención sobre la tarjeta: todavía se puede caer."""
+        x_login = os.getenv("DLOCAL_X_LOGIN")
+        x_trans_key = os.getenv("DLOCAL_X_TRANS_KEY")
+        secreto = os.getenv("DLOCAL_SECRET_KEY")
+        if not (x_login and x_trans_key and secreto and referencia_externa):
+            return False
+        x_date = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        firma = self._firmar(x_login, x_date, "", secreto)
+        pedido = urllib.request.Request(
+            f"{self.API}/payments/{urllib.parse.quote(referencia_externa)}",
+            method="GET",
+            headers={
+                "X-Date": x_date,
+                "X-Login": x_login,
+                "X-Trans-Key": x_trans_key,
+                "X-Version": "2.1",
+                "Authorization": f"V2-HMAC-SHA256, Signature: {firma}",
+            },
+        )
+        try:
+            with urllib.request.urlopen(pedido, timeout=20) as r:
+                datos = json.loads(r.read().decode() or "{}")
+        except (urllib.error.HTTPError, urllib.error.URLError):
+            return False
+        return datos.get("status") == "PAID"
+
+    def referencia_de_notificacion(self, datos: dict) -> str | None:
+        return datos.get("order_id")
 
 
 class PasarelaStripe(Pasarela):
@@ -449,6 +592,7 @@ def iniciar(almacen, perfil: Perfil, plan_codigo: str, periodo: str) -> Checkout
         estado="pendiente",
         pasarela=pasarela.nombre,
         referencia=checkout.id,
+        referencia_externa=checkout.referencia_externa,
     )
     return checkout
 
@@ -463,6 +607,20 @@ def confirmar(almacen, perfil: Perfil, referencia: str) -> dict:
         raise DatosInvalidos("no existe ese pago")
     if fila["estado"] == "pagado":
         return {"ya_confirmado": True, "plan": perfil.plan}
+
+    # SE LE PREGUNTA A LA PASARELA. Este chequeo no estaba y era el agujero más
+    # grave del producto: `/api/pagos/confirmar` daba el plan de alta con sólo
+    # recibir una referencia, así que cualquiera con cuenta pedía un checkout
+    # de Gold, lo "confirmaba" a mano y se quedaba con el plan sin pagar un
+    # peso. En `demo` sigue pasando siempre (no hay plata), pero con
+    # MercadoPago, PayPal o dLocal ahora manda el proveedor.
+    pasarela = pasarela_por_nombre(fila["pasarela"])
+    externa = fila["referencia_externa"] if "referencia_externa" in fila.keys() else ""
+    if not pasarela.esta_pagado(referencia, externa):
+        raise PagoNoAcreditado(
+            "el pago todavía no figura como acreditado en la pasarela. "
+            "Si acabás de pagar, esperá unos segundos y volvé a intentar."
+        )
 
     almacen.con.execute(
         "UPDATE pagos SET estado = 'pagado' WHERE referencia = ?", (referencia,)

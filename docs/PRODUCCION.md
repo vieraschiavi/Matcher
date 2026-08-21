@@ -410,7 +410,15 @@ derechos en el primer video que ande bien.
 
 ---
 
-## 7. Lo que sigue sin resolverse, y es honesto decirlo
+## 7. Claves y credenciales
+
+Todas las variables, de dónde se saca cada una y qué pasa si falta:
+**`docs/CLAVES.md`**. Incluye el checklist de lo que hay que tener puesto antes
+de cobrarle a alguien de verdad.
+
+---
+
+## 8. Lo que sigue sin resolverse, y es honesto decirlo
 
 1. **No hay moderación.** Hay reportes, no hay revisión. Una app de citas sin
    moderación de fotos y de chat se llena de abuso en la primera semana, y es
@@ -442,4 +450,4 @@ reportes, logout con revocación y borrado de cuenta.
 Además, la prueba que justifica todo esto: se crea una cuenta con foto, se
 **reinicia el servidor entero**, y la cuenta, la foto y la sesión siguen ahí.
 
-Y en el repo: **358 tests** verdes, `ruff` limpio.
+Y en el repo: **385 tests** verdes, `ruff` limpio.

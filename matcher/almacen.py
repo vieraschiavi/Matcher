@@ -80,7 +80,12 @@ CREATE TABLE IF NOT EXISTS pagos (
     estado     TEXT NOT NULL,
     pasarela   TEXT NOT NULL,
     referencia TEXT NOT NULL,
-    momento    TEXT NOT NULL
+    momento    TEXT NOT NULL,
+    -- El id que le puso el PROVEEDOR a este cobro (preference de MercadoPago,
+    -- order de PayPal, payment de dLocal). Sin esto no se le puede preguntar a
+    -- la pasarela si el pago entró de verdad, y confirmar sin preguntar es
+    -- regalar el plan (ver `pagos.confirmar`).
+    referencia_externa TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS sesiones (
     token      TEXT PRIMARY KEY,
@@ -247,6 +252,12 @@ class Almacen:
         # columna ya está, y eso es exactamente el caso feliz.
         try:
             con.execute("ALTER TABLE matches ADD COLUMN ciego INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            con.execute(
+                "ALTER TABLE pagos ADD COLUMN referencia_externa TEXT NOT NULL DEFAULT ''"
+            )
         except sqlite3.OperationalError:
             pass
         con.commit()
@@ -1240,14 +1251,15 @@ class Almacen:
         estado: str,
         pasarela: str,
         referencia: str,
+        referencia_externa: str = "",
     ) -> str:
         id_ = uuid.uuid4().hex[:16]
         self.con.execute(
             "INSERT INTO pagos (id, usuario_id, plan, periodo, monto, moneda, estado, "
-            "pasarela, referencia, momento) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "pasarela, referencia, momento, referencia_externa) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (
                 id_, usuario_id, plan, periodo, monto, moneda, estado, pasarela,
-                referencia, datetime.utcnow().isoformat(),
+                referencia, datetime.utcnow().isoformat(), referencia_externa,
             ),
         )
         self.con.commit()
