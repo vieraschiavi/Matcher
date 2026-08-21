@@ -35,6 +35,9 @@ export default function Entrar() {
   const [ocupado, setOcupado] = useState(false);
   const [proveedores, setProveedores] = useState([]);
   const [efimero, setEfimero] = useState(false);
+  // Vacío = el servidor contesta. Con texto = no hay con quién hablar, y ese
+  // texto dice contra qué dirección está compilada esta versión de la app.
+  const [sinServidor, setSinServidor] = useState("");
   const [f, setF] = useState({
     email: "",
     clave: "",
@@ -71,7 +74,18 @@ export default function Entrar() {
     // Si el backend corre sobre almacenamiento efímero hay que decirlo ANTES
     // de que alguien cree una cuenta y suba diez fotos, no después de que las
     // pierda. El servidor lo reporta; la interfaz no lo adivina.
-    api.salud().then((r) => setEfimero(!!r.almacenamiento_efimero)).catch(() => {});
+    // El sondeo de salud es además la forma de saber si HAY servidor. Antes
+    // este `catch` se tragaba el error y la pantalla de entrada quedaba
+    // normal: recién al apretar "Entrar" aparecía un "Failed to fetch" que no
+    // le dice nada a nadie. Con un APK compilado contra una URL equivocada eso
+    // es toda la experiencia: una app que parece rota y no explica por qué.
+    api
+      .salud()
+      .then((r) => {
+        setEfimero(!!r.almacenamiento_efimero);
+        setSinServidor("");
+      })
+      .catch((e) => setSinServidor(e?.sinRed ? e.message : ""));
   }, []);
 
   // Vuelta del proveedor: llega `?token=…` (o `?error=…`) en el hash. El token
@@ -184,6 +198,14 @@ export default function Entrar() {
               ))}
               <div className="separador">{t("o con tu email")}</div>
             </>
+          )}
+
+          {/* Va ARRIBA de todo y en los dos modos: sin servidor no se puede ni
+              entrar ni crear cuenta, así que es lo primero que hay que saber. */}
+          {sinServidor && (
+            <div className="aviso aviso-error" style={{ marginBottom: 12 }}>
+              {sinServidor}
+            </div>
           )}
 
           {efimero && pestana === "crear" && (

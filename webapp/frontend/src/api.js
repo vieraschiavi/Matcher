@@ -51,10 +51,30 @@ const NATIVO = Boolean(
       /^(capacitor|ionic|file):/.test(window.location.protocol))
 );
 const CONFIGURADA = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
+// Backend por defecto para los builds empaquetados (APK, iOS, escritorio).
+//
+// ACÁ HUBO UN BUG CARO. El valor por defecto era `https://api.matcher.app`, un
+// dominio de ejemplo que nunca existió ni se registró. Cualquier APK compilado
+// sin `VITE_API_URL` —o sea, el que sale de correr `npm run apk:debug` a
+// secas— quedaba apuntando ahí, y en el teléfono la app abría bien pero
+// **cualquier acción moría con "Failed to fetch"**: no se podía ni entrar con
+// las cuentas de demo. Nada en el build avisaba; el error recién aparecía con
+// el teléfono en la mano.
+//
+// El valor por defecto ahora es el despliegue de producción real. Se sigue
+// pudiendo pisar al compilar, que es lo que hay que hacer cuando el backend se
+// mude:
+//
+//     VITE_API_URL=https://mi-backend npm run apk:debug
+//
+// `tests/test_url_api.py` no deja volver a un dominio de ejemplo.
+const POR_DEFECTO = "https://matcher-sable.vercel.app";
+
 // El escritorio necesita URL absoluta por el mismo motivo que el APK: la app
 // se sirve desde el disco, no desde el backend, así que una ruta relativa
 // apuntaría al sistema de archivos.
-export const BASE = CONFIGURADA || (NATIVO || ESCRITORIO ? "https://api.matcher.app" : "");
+export const BASE = CONFIGURADA || (NATIVO || ESCRITORIO ? POR_DEFECTO : "");
 export const esNativo = NATIVO;
 export const esEscritorio = ESCRITORIO;
 
@@ -80,17 +100,62 @@ export class ErrorApi extends Error {
   get noAutorizado() {
     return this.estado === 401;
   }
+  /** Hubo respuesta del servidor, así que red hubo. Existe para que quien
+   *  atrapa un error pueda preguntar `e.sinRed` sin fijarse de qué clase es. */
+  get sinRed() {
+    return false;
+  }
+}
+
+/** No se pudo ni hablar con el servidor: no hay respuesta HTTP que mirar. */
+export class ErrorSinRed extends Error {
+  constructor(base, causa) {
+    const donde = base || "este mismo sitio";
+    super(
+      `No se puede conectar con el servidor (${donde}). ` +
+        "Revisá que tengas internet; si el problema sigue, esta versión de la " +
+        "app está compilada contra esa dirección y ahí no hay nadie contestando."
+    );
+    this.estado = 0;
+    this.cuerpo = {};
+    this.base = base;
+    this.causa = causa;
+  }
+  get sinRed() {
+    return true;
+  }
+  get sinCupo() {
+    return false;
+  }
+  get noAutorizado() {
+    return false;
+  }
 }
 
 async function crudo(ruta, metodo, cuerpo, t) {
-  const res = await fetch(`${BASE}/api${ruta}`, {
-    method: metodo,
-    headers: {
-      ...(cuerpo ? { "Content-Type": "application/json" } : {}),
-      ...(t ? { Authorization: `Bearer ${t}` } : {}),
-    },
-    body: cuerpo ? JSON.stringify(cuerpo) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(`${BASE}/api${ruta}`, {
+      method: metodo,
+      headers: {
+        ...(cuerpo ? { "Content-Type": "application/json" } : {}),
+        ...(t ? { Authorization: `Bearer ${t}` } : {}),
+      },
+      body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+    });
+  } catch (e) {
+    // `fetch` tira TypeError("Failed to fetch") cuando no hay red, cuando el
+    // dominio no existe o cuando lo frena CORS. Ese texto no le dice NADA a
+    // nadie: en un APK compilado contra una URL equivocada, la persona ve
+    // "Failed to fetch" y la app parece rota sin motivo.
+    //
+    // Pasó de verdad: el valor por defecto de `BASE` es un dominio de ejemplo,
+    // así que cualquier build sin `VITE_API_URL` sale apuntando a un servidor
+    // que no existe. Con este error, la pantalla dice contra qué URL está
+    // compilada la app y que esa URL no contesta — que es la única pista que
+    // sirve para arreglarlo.
+    throw new ErrorSinRed(BASE, e);
+  }
   const texto = await res.text();
   return { res, datos: texto ? JSON.parse(texto) : null };
 }
