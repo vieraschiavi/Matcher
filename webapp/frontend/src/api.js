@@ -198,6 +198,7 @@ export const SESION_CAIDA = "matcher:sesion-caida";
 
 export const api = {
   salud: () => pedir("/salud"),
+  panel: () => pedir("/panel"),
   catalogos: () => pedir("/catalogos"),
   planes: () => pedir("/planes"),
 

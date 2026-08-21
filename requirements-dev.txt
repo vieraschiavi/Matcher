@@ -3,3 +3,4 @@ pytest>=8.0
 httpx>=0.27          # lo usa fastapi.testclient
 ruff>=0.5
 PyYAML>=6.0         # lo usan los tests que leen electron-builder.yml
+openpyxl>=3.1      # informe ejecutivo en Excel (marketing/generar_informe.py)

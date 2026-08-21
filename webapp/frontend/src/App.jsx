@@ -28,6 +28,7 @@ import Descubrir from "./paginas/Descubrir";
 import Entrar from "./paginas/Entrar";
 import Filtros from "./paginas/Filtros";
 import MiPerfil from "./paginas/MiPerfil";
+import Panel from "./paginas/Panel";
 import Planes from "./paginas/Planes";
 import Radar from "./paginas/Radar";
 import Ranking from "./paginas/Ranking";
@@ -359,6 +360,7 @@ export default function App() {
           <Route path="/filtros" element={<Filtros />} />
           <Route path="/perfil" element={<MiPerfil />} />
           <Route path="/planes" element={<Planes />} />
+          <Route path="/panel" element={<Panel />} />
           <Route path="/pago/:referencia" element={<Planes />} />
           <Route path="*" element={<Navigate to="/descubrir" replace />} />
         </Routes>

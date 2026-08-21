@@ -34,6 +34,7 @@ una fracción de lo que cobra la competencia.
 | Capturas para la web | `node marketing/capturar.mjs` (con el backend arriba) |
 | Videos demo (es/pt/en) | `python3 -m marketing.generar_video` |
 | **Web pública** | `python3 -m marketing.generar_landing` |
+| Informe ejecutivo (Excel) | `python3 -m marketing.generar_informe` |
 
 ## Reglas que no se rompen
 
@@ -155,6 +156,15 @@ una fracción de lo que cobra la competencia.
     `MATCHER_CUENTAS_DUENIO` (ver `matcher/duenio.py`): vacía por defecto, sin
     comodines, y **no inventa un pago** — la contabilidad sigue mostrando sólo
     lo que se cobró de verdad.
+
+16. **El panel del dueño no es para todos.** `/api/panel` devuelve la
+    facturación y la cantidad de clientes: responde **404** —no 403— a
+    cualquiera que no esté en `MATCHER_CUENTAS_DUENIO`, porque un 403 le
+    confirma al que prueba que hay algo que atacar. Y el neto que muestra va
+    marcado `estimado: true` con la comisión a la vista: la comisión real la
+    descuenta la pasarela y varía, y un número que parece exacto sin serlo es
+    peor que uno que se declara aproximado. Los impuestos NO están
+    descontados ahí. Lo fija `tests/test_panel.py`.
 
 ## Convenciones
 - Español rioplatense en el dominio y en los nombres de módulo, igual que

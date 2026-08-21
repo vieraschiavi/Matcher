@@ -35,6 +35,7 @@ from matcher import (
     medios,
     oauth,
     pagos,
+    panel,
     planes,
     radar,
     scoring,
@@ -908,6 +909,53 @@ def confirmar_pago(datos: Confirmacion, perfil: Perfil = Depends(usuario)):
     a = almacen()
     resultado = pagos.confirmar(a, perfil, datos.referencia)
     return {"resultado": resultado, "perfil": a.perfil(perfil.id).a_dict(privado=True)}
+
+
+# ---------------------------------------------------------------------------
+# Panel del dueño y descargas
+# ---------------------------------------------------------------------------
+def duenio_requerido(perfil: Perfil = Depends(usuario)) -> Perfil:
+    """Sólo las cuentas de `MATCHER_CUENTAS_DUENIO`.
+
+    404 y no 403 a propósito: un 403 le confirma a quien prueba que el panel
+    existe y que hay algo que vale la pena atacar. Con 404 el endpoint es
+    indistinguible de una ruta que no está."""
+    if not duenio.es_duenio(perfil.email):
+        raise HTTPException(404, "no encontrado")
+    return perfil
+
+
+@app.get("/api/panel")
+def ver_panel(perfil: Perfil = Depends(duenio_requerido)):
+    """Clientes, descargas y plata. Se mira desde el navegador o desde la app:
+    no hace falta abrir la base ni correr nada."""
+    return panel.resumen(almacen())
+
+
+@app.get("/api/descargar/{plataforma}")
+def descargar(plataforma: str, request: Request):
+    """Cuenta la descarga y manda al archivo de verdad.
+
+    La URL real sale de una variable de entorno (`MATCHER_URL_APK`,
+    `MATCHER_URL_EXE`): el binario no se sirve desde acá — pesa 77 MB y este
+    proceso está para la API, no para repartir archivos. Si la variable no
+    está, devuelve 404 en vez de mandar a una URL rota.
+    """
+    variables = {
+        "apk": "MATCHER_URL_APK",
+        "exe": "MATCHER_URL_EXE",
+        "ios": "MATCHER_URL_IOS",
+    }
+    if plataforma not in variables:
+        raise HTTPException(404, "plataforma desconocida")
+    destino = os.getenv(variables[plataforma], "").strip()
+    if not destino:
+        raise HTTPException(404, f"todavía no hay descarga publicada para {plataforma}")
+
+    panel.registrar_descarga(
+        almacen(), plataforma, request.headers.get("referer", "")
+    )
+    return RedirectResponse(destino, status_code=302)
 
 
 @app.post("/api/pagos/cancelar")

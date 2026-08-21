@@ -186,6 +186,17 @@ CREATE TABLE IF NOT EXISTS videollamadas (
     resuelto  TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS ix_video_match ON videollamadas(match_id, momento);
+-- Descargas del APK y del instalador de Windows. NO se guarda IP ni nada que
+-- identifique a la persona: para saber cuántos bajaron el programa no hace
+-- falta saber quiénes son, y un dato personal que no se guarda es un dato que
+-- no se puede filtrar.
+CREATE TABLE IF NOT EXISTS descargas (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    plataforma TEXT NOT NULL,
+    referente  TEXT NOT NULL DEFAULT '',
+    momento    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_descarga_momento ON descargas(momento);
 CREATE TABLE IF NOT EXISTS altas_pendientes (
     token     TEXT PRIMARY KEY,
     proveedor TEXT NOT NULL,
