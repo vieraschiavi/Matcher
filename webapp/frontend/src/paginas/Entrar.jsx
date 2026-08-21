@@ -24,7 +24,10 @@ const CUENTAS_DEMO = [
   { email: "vieraschiavi@gmail.com", quien: "Martín · Gold, todo activado" },
   { email: "arcortito@gmail.com", quien: "Ariel · Gold, todo activado" },
 ];
-const CLAVE_DEMO = "matcher2026";
+// La clave de las cuentas de demo NO va en el bundle: el bundle es público y
+// el repositorio también. Se pasa al compilar sólo cuando se arma una build
+// para mostrar (VITE_CLAVE_DEMO); sin eso, los botones de demo ni aparecen.
+const CLAVE_DEMO = import.meta.env.VITE_CLAVE_DEMO || "";
 
 export default function Entrar() {
   const { entrar, entrarConToken, registrar, catalogos, sesionCaida } = useApp();
@@ -38,6 +41,8 @@ export default function Entrar() {
   // Vacío = el servidor contesta. Con texto = no hay con quién hablar, y ese
   // texto dice contra qué dirección está compilada esta versión de la app.
   const [sinServidor, setSinServidor] = useState("");
+  // Sólo se muestran las cuentas de demo si el servidor lo habilita.
+  const [demoPublica, setDemoPublica] = useState(false);
   const [f, setF] = useState({
     email: "",
     clave: "",
@@ -83,6 +88,7 @@ export default function Entrar() {
       .salud()
       .then((r) => {
         setEfimero(!!r.almacenamiento_efimero);
+        setDemoPublica(!!r.demo_publica);
         setSinServidor("");
       })
       .catch((e) => setSinServidor(e?.sinRed ? e.message : ""));
@@ -372,28 +378,37 @@ export default function Entrar() {
           </form>
         </div>
 
-        <div className="panel demo-caja">
-          <h3>{t("Probar la demo")}</h3>
-          <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "0 0 11px" }}>
-            Dos cuentas con Gold vigente, verificadas y con las 10 fotos cargadas. El resto de los
-            perfiles son sintéticos y están marcados como tales.
-          </p>
-          {CUENTAS_DEMO.map((c) => (
-            <button
-              key={c.email}
-              className="btn btn-bloque"
-              disabled={ocupado}
-              onClick={() => entrarDemo(c.email)}
-            >
-              <b>{c.email}</b>
-              <br />
-              <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: 12 }}>{c.quien}</span>
-            </button>
-          ))}
-          <p style={{ color: "var(--faint)", fontSize: 11.5, margin: "8px 0 0" }}>
-            Contraseña de ambas: <code>{CLAVE_DEMO}</code>
-          </p>
-        </div>
+        {/* La demo dejó de ser pública para no regalarle el producto a la
+            competencia: quien entra a una demo abierta se lleva las pantallas y
+            los flujos sin dejar rastro y sin que nadie le venda nada. El video
+            de la landing muestra el resultado; para ver la app andando hay que
+            pedirla.
+
+            Lo decide el SERVIDOR (`demo_publica` en /api/salud), no una
+            constante del bundle: una bandera del cliente se enciende editando
+            el JavaScript, y esto es justamente lo que no queremos que se pueda
+            abrir desde afuera. */}
+        {demoPublica && (
+          <div className="panel demo-caja">
+            <h3>{t("Probar la demo")}</h3>
+            <p style={{ color: "var(--muted)", fontSize: 12.5, margin: "0 0 11px" }}>
+              Dos cuentas con Gold vigente, verificadas y con las 10 fotos cargadas. El resto de los
+              perfiles son sintéticos y están marcados como tales.
+            </p>
+            {CUENTAS_DEMO.map((c) => (
+              <button
+                key={c.email}
+                className="btn btn-bloque"
+                disabled={ocupado}
+                onClick={() => entrarDemo(c.email)}
+              >
+                <b>{c.email}</b>
+                <br />
+                <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: 12 }}>{c.quien}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

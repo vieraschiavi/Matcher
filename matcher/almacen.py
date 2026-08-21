@@ -197,6 +197,23 @@ CREATE TABLE IF NOT EXISTS descargas (
     momento    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_descarga_momento ON descargas(momento);
+-- Pedidos de demo. La demo dejó de ser pública: para verla hay que pedirla,
+-- y así queda registrado quién la pidió y con qué mail (ver `solicitudes.py`).
+-- Son datos personales de alguien que todavía no es cliente: sólo los lee el
+-- dueño, no hay ruta pública que los devuelva.
+CREATE TABLE IF NOT EXISTS solicitudes_demo (
+    id      TEXT PRIMARY KEY,
+    nombre  TEXT NOT NULL,
+    email   TEXT NOT NULL,
+    empresa TEXT NOT NULL DEFAULT '',
+    pais    TEXT NOT NULL DEFAULT '',
+    mensaje TEXT NOT NULL DEFAULT '',
+    origen  TEXT NOT NULL DEFAULT '',
+    estado  TEXT NOT NULL DEFAULT 'nueva',
+    avisado INTEGER NOT NULL DEFAULT 0,
+    momento TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_solicitud_email ON solicitudes_demo(email, momento);
 CREATE TABLE IF NOT EXISTS altas_pendientes (
     token     TEXT PRIMARY KEY,
     proveedor TEXT NOT NULL,

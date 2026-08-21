@@ -166,6 +166,20 @@ una fracción de lo que cobra la competencia.
     peor que uno que se declara aproximado. Los impuestos NO están
     descontados ahí. Lo fija `tests/test_panel.py`.
 
+17. **La demo NO es pública.** Decisión comercial del dueño: una demo abierta
+    le regala el producto a la competencia — quien entra se lleva las pantallas
+    y los flujos sin dejar rastro y sin que nadie le venda nada. El video de la
+    landing muestra el RESULTADO y sí es público; la app andando se pide
+    (`/api/demo/solicitar`) y se muestra acompañada. Nunca vuelvas a poner un
+    botón de descarga en la landing ni a publicar las cuentas de demo: lo
+    fijan `tests/test_solicitudes.py::test_la_landing_no_ofrece_descargas` y
+    `test_la_demo_no_es_publica_por_defecto`.
+    Dos cosas del formulario que parecen detalles y no lo son: **el pedido se
+    guarda ANTES de intentar el mail** (si no, un SMTP caído pierde al
+    prospecto en silencio), y sin proveedor de mail configurado igual funciona
+    — el panel avisa que los pedidos sólo se ven ahí, en vez de prometer un
+    aviso que nadie manda.
+
 ## Convenciones
 - Español rioplatense en el dominio y en los nombres de módulo, igual que
   MV Kobra AI y MV Cliente IA.

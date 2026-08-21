@@ -121,17 +121,26 @@ def test_los_precios_de_la_competencia_van_como_aproximados(paginas):
                                         "not verified")), f"{idioma}: falta el aviso"
 
 
-def test_un_boton_sin_url_no_es_un_enlace_roto(monkeypatch):
-    """Sin URL configurada el botón sale apagado, no apuntando a '#' ni a una
-    URL que da 404."""
-    monkeypatch.setattr(gl, "URL_EXE", "")
-    html = gl.pagina("es")
-    assert 'href="#"' not in html
-    assert "btn-apagado" in html
+def test_la_landing_no_ofrece_descargas_ni_con_las_urls_puestas(monkeypatch):
+    """La demo dejó de ser pública: el artefacto no se regala.
 
-    monkeypatch.setattr(gl, "URL_EXE", "https://example.test/Matcher.exe")
-    html = gl.pagina("es")
-    assert 'href="https://example.test/Matcher.exe"' in html
+    Este test reemplaza al que exigía lo contrario (que hubiera botones de
+    descarga). Se verifica con las variables PUESTAS a propósito: `URL_APK` y
+    `URL_EXE` siguen existiendo para `/api/descargar/`, y lo que hay que
+    garantizar es que aunque estén configuradas, la landing no las publique.
+    """
+    from marketing import generar_landing as gl
+
+    monkeypatch.setenv("MATCHER_URL_EXE", "https://ejemplo.test/Matcher.exe")
+    monkeypatch.setenv("MATCHER_URL_APK", "https://ejemplo.test/matcher.apk")
+
+    for idioma in gl.IDIOMAS:
+        html = gl.pagina(idioma)
+        assert "Matcher.exe" not in html, f"{idioma}: volvió la descarga del .exe"
+        assert "matcher.apk" not in html, f"{idioma}: volvió la descarga del APK"
+        assert 'href="#"' not in html
+        # Lo que SÍ tiene que haber: el formulario para pedirla.
+        assert "/api/demo/solicitar" in html
 
 
 def test_los_videos_referenciados_existen(paginas):

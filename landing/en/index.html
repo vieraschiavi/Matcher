@@ -68,6 +68,23 @@ video {
   background: var(--navy-900); display: block; margin-top: 28px;
 }
 .nota { color: var(--muted); font-size: 13.5px; margin-top: 10px; }
+.formulario {
+  display: grid; gap: 14px; margin-top: 26px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.formulario label { display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; color: var(--muted); }
+.formulario .ancho { grid-column: 1 / -1; }
+.formulario input, .formulario textarea {
+  background: var(--navy-900); border: 1px solid var(--line); color: var(--ink);
+  border-radius: 11px; padding: 12px 13px; font: inherit; font-size: 15px; width: 100%;
+}
+.formulario input:focus, .formulario textarea:focus { outline: none; border-color: var(--coral); }
+/* La trampa para robots se saca de la vista SIN `display:none`: varios bots
+   detectan el `display:none` y saltean el campo, que es justo lo que no
+   queremos. Así lo llenan y quedan marcados. */
+.formulario .trampa {
+  position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0;
+}
 .rejilla { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); margin-top: 28px; }
 .ficha { background: var(--navy-900); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
 .ficha .ico { font-size: 24px; }
@@ -122,9 +139,7 @@ footer { padding: 34px 0 48px; border-top: 1px solid var(--line); color: var(--m
   <h1>Filters that actually hold.</h1>
   <p class="bajada">Ask for one team&#x27;s fans and nobody else shows up. Every filter is in the free plan: you pay for volume and visibility, never for the right to filter.</p>
   <div class="botones">
-    <span class="btn btn-primario btn-apagado" aria-disabled="true">Open in the browser <em>· coming soon</em></span>
-    <span class="btn btn-apagado" aria-disabled="true">Windows (installer) <em>· coming soon</em></span>
-    <span class="btn btn-apagado" aria-disabled="true">Android (APK) <em>· coming soon</em></span>
+    <a class="btn btn-primario" href="#demo">See the demo</a>
   </div>
   <!-- MP4 primero (lo que quiere Safari/iOS) y WebM detrás: hay Chromium
        armados sin H.264 y ahí el MP4 solo no carga ni los metadatos. El
@@ -287,13 +302,62 @@ footer { padding: 34px 0 48px; border-top: 1px solid var(--line); color: var(--m
 <section class="envoltorio">
   <h2>The demo profiles are synthetic</h2>
   <p class="bajada">The faces in the pack are generated — people who do not exist — and every demo profile is marked as synthetic inside the app. There are no photos of real people.</p>
-  <div class="botones">
-    <span class="btn btn-primario btn-apagado" aria-disabled="true">Open in the browser <em>· coming soon</em></span>
-    <span class="btn btn-apagado" aria-disabled="true">Windows (installer) <em>· coming soon</em></span>
-    <span class="btn btn-apagado" aria-disabled="true">Android (APK) <em>· coming soon</em></span>
-  </div>
+</section>
+
+<!-- LA DEMO NO ES PÚBLICA NI DESCARGABLE.
+     El video de arriba muestra el resultado; la app andando se muestra en vivo.
+     Una demo abierta le regala el producto a la competencia: quien entra se
+     lleva las pantallas y los flujos sin dejar rastro y sin que nadie le venda
+     nada. Acá queda registrado quién pidió y con qué mail. -->
+<section class="envoltorio" id="demo">
+  <h2>See the demo</h2>
+  <p class="bajada">The demo is not public and not downloadable: we show it live, one to one. Leave your details and we&#x27;ll set it up.</p>
+  <form class="formulario" id="form-demo" novalidate>
+    <label>Full name<input name="nombre" required autocomplete="name"></label>
+    <label>Email<input name="email" type="email" required autocomplete="email"></label>
+    <label>Company<input name="empresa" required autocomplete="organization"></label>
+    <label>Country<input name="pais" required autocomplete="country-name"></label>
+    <label class="ancho">What would you like to see? (optional)<textarea name="mensaje" rows="3"></textarea></label>
+    <!-- Trampa para robots: la persona no lo ve, así que no lo llena. -->
+    <input name="web" class="trampa" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <div class="ancho">
+      <button class="btn btn-primario" type="submit">Request the demo</button>
+      <span id="demo-estado" class="nota" role="status"></span>
+    </div>
+  </form>
+  <p class="nota">We use your details only to contact you about the demo. Nothing else.</p>
 </section>
 </main>
+
+<script>
+(function () {
+  var API = "";
+  var f = document.getElementById("form-demo");
+  var estado = document.getElementById("demo-estado");
+  if (!f) return;
+  f.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var boton = f.querySelector("button[type=submit]");
+    boton.disabled = true;
+    estado.textContent = "Sending\u2026";
+    var datos = {};
+    new FormData(f).forEach(function (v, k) { datos[k] = v; });
+    fetch(API + "/api/demo/solicitar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(datos),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (r) {
+        if (!r.ok) throw new Error((r.j && r.j.detail) || "error");
+        f.reset();
+        estado.textContent = "We got your request. We'll email you to set up the demo.";
+      })
+      .catch(function (err) { estado.textContent = err.message; })
+      .finally(function () { boton.disabled = false; });
+  });
+})();
+</script>
 
 <footer><div class="envoltorio">Matcher · web, Android, iOS and Windows</div></footer>
 </body>

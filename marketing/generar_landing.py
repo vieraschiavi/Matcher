@@ -18,19 +18,21 @@ del español y una función nueva figura en uno solo. Acá:
 Si tocás la landing, tocá este archivo y regenerá. Editar los HTML es perder
 el cambio en la próxima corrida.
 
-LOS ENLACES DE DESCARGA
-`URL_APP`, `URL_APK` y `URL_EXE` salen de variables de entorno. Si falta una,
-el botón sale **apagado y dice "en preparación"** en vez de linkear a una URL
-que devuelve 404: un botón de descarga roto en la portada es peor que no tener
-el botón (regla 10 — nada de promesas que no se pueden sostener).
+LA DEMO NO ES PÚBLICA NI DESCARGABLE
+Decisión comercial: una demo abierta le regala el producto a la competencia.
+Acá va el VIDEO (el resultado visual, que es lo que atrae) y un formulario para
+pedir la demo en vivo. No hay botones de descarga, y no tienen que volver:
+`tests/test_solicitudes.py::test_la_landing_no_ofrece_descargas` lo fija.
 
-    MATCHER_URL_APP=https://…  MATCHER_URL_EXE=https://…/Matcher-1.0.0-instalador.exe \
-    python3 -m marketing.generar_landing
+`URL_APP` es la del backend, a donde el formulario postea el pedido:
+
+    MATCHER_URL_APP=https://tu-backend python3 -m marketing.generar_landing
 """
 
 from __future__ import annotations
 
 import html
+import json
 import os
 import shutil
 import subprocess
@@ -49,8 +51,6 @@ CAPTURAS = RAIZ / "marketing" / "capturas"
 IDIOMAS = ("es", "pt", "en")
 
 URL_APP = os.getenv("MATCHER_URL_APP", "").strip()
-URL_APK = os.getenv("MATCHER_URL_APK", "").strip()
-URL_EXE = os.getenv("MATCHER_URL_EXE", "").strip()
 
 # Capturas que se muestran en la galería. Se copian a `landing/media/`.
 GALERIA = ["01-descubrir.png", "03-radar.png", "11-videollamada.png", "05-crush.png"]
@@ -94,6 +94,17 @@ T = {
         "sint_b": "Las caras del pack son rostros generados, de personas que no existen, y cada "
                   "perfil de demostración va marcado como sintético dentro de la app. No hay "
                   "fotos de personas reales.",
+        "demo_t": "Ver la demo",
+        "demo_b": "La demo no es pública ni descargable: se muestra en vivo, uno a uno. Dejá tus datos y coordinamos.",
+        "f_nombre": "Nombre y apellido",
+        "f_email": "Email",
+        "f_empresa": "Empresa",
+        "f_pais": "País",
+        "f_mensaje": "¿Qué te gustaría ver? (opcional)",
+        "f_enviar": "Pedir la demo",
+        "f_enviando": "Enviando…",
+        "f_ok": "Recibimos tu pedido. Te escribimos para coordinar la demo.",
+        "f_privacidad": "Usamos tus datos sólo para contactarte por la demo. Nada más.",
         "pie": "Matcher · web, Android, iOS y Windows",
         "nota_video": "Los videos no tienen voz en off ni música: se leen sin audio.",
     },
@@ -131,6 +142,17 @@ T = {
         "sint_b": "Os rostos do pacote são gerados, de pessoas que não existem, e cada perfil de "
                   "demonstração vai marcado como sintético dentro do app. Não há fotos de "
                   "pessoas reais.",
+        "demo_t": "Ver a demo",
+        "demo_b": "A demo não é pública nem para baixar: mostramos ao vivo, um a um. Deixe seus dados e combinamos.",
+        "f_nombre": "Nome e sobrenome",
+        "f_email": "E-mail",
+        "f_empresa": "Empresa",
+        "f_pais": "País",
+        "f_mensaje": "O que gostaria de ver? (opcional)",
+        "f_enviar": "Pedir a demo",
+        "f_enviando": "Enviando…",
+        "f_ok": "Recebemos seu pedido. Entraremos em contato para combinar a demo.",
+        "f_privacidad": "Usamos seus dados só para falar sobre a demo. Nada mais.",
         "pie": "Matcher · web, Android, iOS e Windows",
         "nota_video": "Os vídeos não têm narração nem música: leem-se sem áudio.",
     },
@@ -167,6 +189,17 @@ T = {
         "sint_b": "The faces in the pack are generated — people who do not exist — and every demo "
                   "profile is marked as synthetic inside the app. There are no photos of real "
                   "people.",
+        "demo_t": "See the demo",
+        "demo_b": "The demo is not public and not downloadable: we show it live, one to one. Leave your details and we'll set it up.",
+        "f_nombre": "Full name",
+        "f_email": "Email",
+        "f_empresa": "Company",
+        "f_pais": "Country",
+        "f_mensaje": "What would you like to see? (optional)",
+        "f_enviar": "Request the demo",
+        "f_enviando": "Sending…",
+        "f_ok": "We got your request. We'll email you to set up the demo.",
+        "f_privacidad": "We use your details only to contact you about the demo. Nothing else.",
         "pie": "Matcher · web, Android, iOS and Windows",
         "nota_video": "The videos have no voice-over and no music: they read without audio.",
     },
@@ -281,17 +314,6 @@ def _precio(valor: float, idioma: str = "es") -> str:
     return f"USD {texto}"
 
 
-def _boton(url: str, etiqueta: str, preparacion: str, primario: bool = False) -> str:
-    """Un botón de descarga. Sin URL sale apagado, no roto."""
-    clase = "btn btn-primario" if primario else "btn"
-    if not url:
-        return (
-            f'<span class="{clase} btn-apagado" aria-disabled="true">'
-            f"{_e(etiqueta)} <em>· {_e(preparacion)}</em></span>"
-        )
-    return f'<a class="{clase}" href="{_e(url)}">{_e(etiqueta)}</a>'
-
-
 def _css() -> str:
     p = PALETA
     return f"""
@@ -351,6 +373,23 @@ video {{
   background: var(--navy-900); display: block; margin-top: 28px;
 }}
 .nota {{ color: var(--muted); font-size: 13.5px; margin-top: 10px; }}
+.formulario {{
+  display: grid; gap: 14px; margin-top: 26px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}}
+.formulario label {{ display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; color: var(--muted); }}
+.formulario .ancho {{ grid-column: 1 / -1; }}
+.formulario input, .formulario textarea {{
+  background: var(--navy-900); border: 1px solid var(--line); color: var(--ink);
+  border-radius: 11px; padding: 12px 13px; font: inherit; font-size: 15px; width: 100%;
+}}
+.formulario input:focus, .formulario textarea:focus {{ outline: none; border-color: var(--coral); }}
+/* La trampa para robots se saca de la vista SIN `display:none`: varios bots
+   detectan el `display:none` y saltean el campo, que es justo lo que no
+   queremos. Así lo llenan y quedan marcados. */
+.formulario .trampa {{
+  position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0;
+}}
 .rejilla {{ display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); margin-top: 28px; }}
 .ficha {{ background: var(--navy-900); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }}
 .ficha .ico {{ font-size: 24px; }}
@@ -443,6 +482,14 @@ def pagina(idioma: str) -> str:
         f"<td><b>{_e(_precio(planes.PLANES['plus'].precio_mes, idioma))} / {_e(t['mes'])}</b></td></tr>"
     )
 
+    # El formulario postea al backend, que vive en OTRO dominio que la
+    # landing (la landing es estática). Sin `URL_APP` configurada no hay a
+    # dónde mandar el pedido: se usa una ruta relativa para que al menos
+    # funcione si algún día la landing se sirve desde el mismo proceso.
+    api_js = json.dumps(URL_APP.rstrip("/") if URL_APP else "")
+    enviando_js = json.dumps(t["f_enviando"])
+    ok_js = json.dumps(t["f_ok"])
+
     # El `aria-current` se arma aparte y no dentro de la f-string: una f-string
     # no admite backslashes adentro de la expresión y las comillas escapadas lo
     # rompían en tiempo de importación.
@@ -480,9 +527,7 @@ def pagina(idioma: str) -> str:
   <h1>{_e(t['hero_t'])}</h1>
   <p class="bajada">{_e(t['hero_b'])}</p>
   <div class="botones">
-    {_boton(URL_APP, t['d_web'], t['preparacion'], primario=True)}
-    {_boton(URL_EXE, t['d_exe'], t['preparacion'])}
-    {_boton(URL_APK, t['d_apk'], t['preparacion'])}
+    <a class="btn btn-primario" href="#demo">{_e(t['demo_t'])}</a>
   </div>
   <!-- MP4 primero (lo que quiere Safari/iOS) y WebM detrás: hay Chromium
        armados sin H.264 y ahí el MP4 solo no carga ni los metadatos. El
@@ -532,13 +577,62 @@ def pagina(idioma: str) -> str:
 <section class="envoltorio">
   <h2>{_e(t['sint_t'])}</h2>
   <p class="bajada">{_e(t['sint_b'])}</p>
-  <div class="botones">
-    {_boton(URL_APP, t['d_web'], t['preparacion'], primario=True)}
-    {_boton(URL_EXE, t['d_exe'], t['preparacion'])}
-    {_boton(URL_APK, t['d_apk'], t['preparacion'])}
-  </div>
+</section>
+
+<!-- LA DEMO NO ES PÚBLICA NI DESCARGABLE.
+     El video de arriba muestra el resultado; la app andando se muestra en vivo.
+     Una demo abierta le regala el producto a la competencia: quien entra se
+     lleva las pantallas y los flujos sin dejar rastro y sin que nadie le venda
+     nada. Acá queda registrado quién pidió y con qué mail. -->
+<section class="envoltorio" id="demo">
+  <h2>{_e(t['demo_t'])}</h2>
+  <p class="bajada">{_e(t['demo_b'])}</p>
+  <form class="formulario" id="form-demo" novalidate>
+    <label>{_e(t['f_nombre'])}<input name="nombre" required autocomplete="name"></label>
+    <label>{_e(t['f_email'])}<input name="email" type="email" required autocomplete="email"></label>
+    <label>{_e(t['f_empresa'])}<input name="empresa" required autocomplete="organization"></label>
+    <label>{_e(t['f_pais'])}<input name="pais" required autocomplete="country-name"></label>
+    <label class="ancho">{_e(t['f_mensaje'])}<textarea name="mensaje" rows="3"></textarea></label>
+    <!-- Trampa para robots: la persona no lo ve, así que no lo llena. -->
+    <input name="web" class="trampa" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <div class="ancho">
+      <button class="btn btn-primario" type="submit">{_e(t['f_enviar'])}</button>
+      <span id="demo-estado" class="nota" role="status"></span>
+    </div>
+  </form>
+  <p class="nota">{_e(t['f_privacidad'])}</p>
 </section>
 </main>
+
+<script>
+(function () {{
+  var API = {api_js};
+  var f = document.getElementById("form-demo");
+  var estado = document.getElementById("demo-estado");
+  if (!f) return;
+  f.addEventListener("submit", function (e) {{
+    e.preventDefault();
+    var boton = f.querySelector("button[type=submit]");
+    boton.disabled = true;
+    estado.textContent = {enviando_js};
+    var datos = {{}};
+    new FormData(f).forEach(function (v, k) {{ datos[k] = v; }});
+    fetch(API + "/api/demo/solicitar", {{
+      method: "POST",
+      headers: {{ "Content-Type": "application/json" }},
+      body: JSON.stringify(datos),
+    }})
+      .then(function (r) {{ return r.json().then(function (j) {{ return {{ ok: r.ok, j: j }}; }}); }})
+      .then(function (r) {{
+        if (!r.ok) throw new Error((r.j && r.j.detail) || "error");
+        f.reset();
+        estado.textContent = {ok_js};
+      }})
+      .catch(function (err) {{ estado.textContent = err.message; }})
+      .finally(function () {{ boton.disabled = false; }});
+  }});
+}})();
+</script>
 
 <footer><div class="envoltorio">{_e(t['pie'])}</div></footer>
 </body>

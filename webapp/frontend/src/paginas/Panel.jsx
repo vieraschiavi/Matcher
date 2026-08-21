@@ -28,7 +28,16 @@ function Kpi({ rotulo, valor, nota, destacado }) {
 
 export default function Panel() {
   const [datos, setDatos] = useState(null);
+  const [pedidos, setPedidos] = useState(null);
   const [error, setError] = useState("");
+
+  const cargarPedidos = () =>
+    api.solicitudes().then(setPedidos).catch(() => setPedidos(null));
+
+  const marcar = async (id, estado) => {
+    await api.marcarSolicitud(id, estado);
+    await cargarPedidos();
+  };
 
   const cargar = () =>
     api
@@ -41,6 +50,7 @@ export default function Panel() {
 
   useEffect(() => {
     cargar();
+    cargarPedidos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -125,6 +135,48 @@ export default function Panel() {
         <Kpi rotulo="Windows (.exe)" valor={fmt(descargas.por_plataforma.exe)} />
         <Kpi rotulo={t("Últimos 30 días")} valor={fmt(descargas.ultimos_30d)} />
       </div>
+
+      {pedidos && (
+        <>
+          <h3 className="panel-titulo">
+            {t("Pedidos de demo")} ({pedidos.solicitudes.length})
+          </h3>
+          {/* Si no hay vía de aviso, los pedidos NO llegan al mail y hay que
+              entrar acá a mirarlos. Mejor saberlo que enterarse por un
+              prospecto que reclama que nunca le contestaron. */}
+          <p className="page-sub">
+            {pedidos.aviso === "ninguna"
+              ? t("No hay envío de mail configurado: los pedidos sólo se ven acá.")
+              : `${t("Te llegan por mail a")} ${pedidos.destino} (${pedidos.aviso})`}
+          </p>
+          {pedidos.solicitudes.length === 0 && (
+            <p className="page-sub">{t("Todavía no pidió nadie.")}</p>
+          )}
+          <div className="pedidos">
+            {pedidos.solicitudes.map((s) => (
+              <div key={s.id} className={`pedido pedido-${s.estado}`}>
+                <div className="pedido-quien">
+                  <b>{s.nombre}</b>
+                  <span>{s.empresa} · {s.pais}</span>
+                  <a href={`mailto:${s.email}`}>{s.email}</a>
+                </div>
+                {s.mensaje && <p className="pedido-mensaje">{s.mensaje}</p>}
+                <div className="pedido-pie">
+                  <span className="insignia insignia-auto">{s.estado}</span>
+                  <span className="pedido-fecha">{(s.momento || "").slice(0, 16).replace("T", " ")}</span>
+                  <span className="pedido-acciones">
+                    {["agendada", "hecha", "descartada"].map((e) => (
+                      <button key={e} className="chip" onClick={() => marcar(s.id, e)}>
+                        {t(e)}
+                      </button>
+                    ))}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <h3 className="panel-titulo">{t("Uso")}</h3>
       <div className="grid grid-3">

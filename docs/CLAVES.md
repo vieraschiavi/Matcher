@@ -53,6 +53,59 @@ privilegiada. No acepta comodines (`*@gmail.com` no funciona, a propósito).
 
 ---
 
+## 2 bis. La demo bajo pedido (Resend)
+
+La demo **no es pública ni descargable**: la landing muestra el video y un
+formulario. Quien lo llena queda registrado y te llega el aviso.
+
+### Sin configurar nada
+
+Funciona igual: el pedido se guarda y lo ves en **Panel → Pedidos de demo**.
+No se manda mail, y el panel te lo dice con todas las letras para que no te
+enteres por un prospecto que reclama.
+
+### Con Resend (recomendado, gratis)
+
+Panel: <https://resend.com/api-keys>
+
+1. Creá la cuenta con **vieraschiavi@gmail.com** (importante, ver abajo).
+2. **API Keys → Create API Key**, permiso *Sending access*. Copiala: se ve
+   una sola vez.
+3. En Vercel → Settings → Environment Variables:
+
+| Variable | Valor |
+|---|---|
+| `RESEND_API_KEY` | `re_...` |
+| `MATCHER_EMAIL_DEMOS` | `vieraschiavi@gmail.com` (opcional, ya es el default) |
+
+**El detalle que no está en el botón de "empezar":** sin dominio propio
+verificado, Resend sólo deja mandar **desde** `onboarding@resend.dev` y **sólo
+hacia la dirección de tu propia cuenta de Resend**. Para esto alcanza —el aviso
+va a tu mail— pero por eso importa crear la cuenta con el mail donde querés
+recibir. Cuando tengas dominio, lo verificás (unos registros DNS) y ponés
+`MATCHER_EMAIL_REMITENTE=demos@tudominio.com`.
+
+Plan gratis: 3.000 mails por mes, 100 por día. Para pedidos de demo sobra.
+
+### Con tu propio SMTP (alternativa)
+
+Si ya tenés servidor de correo y no querés sumar otro servicio:
+`MATCHER_SMTP_HOST`, `MATCHER_SMTP_PUERTO` (587), `MATCHER_SMTP_USUARIO`,
+`MATCHER_SMTP_CLAVE`. Resend tiene prioridad si están los dos.
+
+### Volver a abrir la demo (si alguna vez querés)
+
+| Variable | Valor |
+|---|---|
+| `MATCHER_DEMO_PUBLICA` | `1` para mostrar las cuentas de demo en la entrada |
+| `VITE_CLAVE_DEMO` | la contraseña, al compilar el frontend |
+
+Vienen apagadas. Y **cambiá `MATCHER_DEMO_CLAVE`**: la contraseña vieja
+(`matcher2026`) estuvo publicada en la pantalla de entrada y en el repositorio,
+así que hay que darla por conocida.
+
+---
+
 ## 3. MercadoPago
 
 Panel: <https://www.mercadopago.com.uy/developers/panel>

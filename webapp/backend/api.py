@@ -41,6 +41,7 @@ from matcher import (
     scoring,
     segundavuelta,
     seguridad,
+    solicitudes,
     videollamada,
     vitrinas,
 )
@@ -60,6 +61,11 @@ RUTA_BD = os.getenv("MATCHER_BD", str(RAIZ / "datos" / "matcher.db"))
 # La demo se puebla sola al arrancar salvo que se apague explícitamente. Es lo
 # que hace que `uvicorn` + navegador funcione sin ningún paso previo.
 POBLAR_DEMO = os.getenv("MATCHER_DEMO", "1") == "1"
+# Sembrar los perfiles de demostración y ABRIR la demo al público son dos cosas
+# distintas: lo primero hace falta para que la app se vea con gente adentro; lo
+# segundo es regalarle el producto a cualquiera que pase. Por eso son dos
+# variables y ésta viene apagada.
+DEMO_PUBLICA = os.getenv("MATCHER_DEMO_PUBLICA", "0") == "1"
 
 app = FastAPI(title="Matcher API", version="1.0.0")
 
@@ -211,6 +217,19 @@ class Registro(BaseModel):
     preferencias: AltaPreferencias | None = None
 
 
+class PedidoDemo(BaseModel):
+    nombre: str
+    email: str
+    empresa: str = ""
+    pais: str = ""
+    mensaje: str = ""
+    # Trampa para robots: un campo que la persona no ve y por lo tanto no
+    # llena. Si viene con algo, es un bot rellenando todo el formulario. Se
+    # responde 200 igual — decirle "te detecté" al que raspa es enseñarle a
+    # esquivar la próxima.
+    web: str = ""
+
+
 class Credenciales(BaseModel):
     email: str
     clave: str
@@ -304,6 +323,17 @@ def salud():
         "version": app.version,
         "perfiles": len(almacen().todos()),
         "demo": POBLAR_DEMO,
+        # ¿Se muestran las cuentas de demo en la pantalla de entrada?
+        #
+        # Apagado por defecto, y a propósito. Una demo abierta le regala el
+        # producto a la competencia: quien entra se lleva las pantallas y los
+        # flujos sin dejar rastro. Ahora la demo se pide (`/api/demo/solicitar`)
+        # y se muestra acompañada.
+        #
+        # Lo decide el servidor y no el bundle porque una bandera del cliente
+        # se enciende editando el JavaScript — que es exactamente lo que no
+        # queremos que se pueda hacer desde afuera.
+        "demo_publica": DEMO_PUBLICA,
         "pasarela": os.getenv("MATCHER_PASARELA", "demo"),
         # Si esto es False en un despliegue serverless, las sesiones se caen
         # solas: cada instancia firma con una clave distinta. Es un booleano,
@@ -923,6 +953,47 @@ def duenio_requerido(perfil: Perfil = Depends(usuario)) -> Perfil:
     if not duenio.es_duenio(perfil.email):
         raise HTTPException(404, "no encontrado")
     return perfil
+
+
+@app.post("/api/demo/solicitar")
+def pedir_demo(datos: PedidoDemo, request: Request):
+    """La demo no es pública: se pide. Esta ruta SÍ es pública (si no, nadie
+    podría pedirla) pero no devuelve nada del producto — sólo confirma."""
+    if datos.web.strip():
+        return {"ok": True, "recibido": True}
+    r = solicitudes.crear(
+        almacen(),
+        datos.model_dump(),
+        origen=request.headers.get("referer", ""),
+    )
+    return {
+        "ok": True,
+        "recibido": True,
+        # No se le dice al que pide si el mail salió o no: es información
+        # interna, y "no se pudo avisar" lo asusta sin motivo. El pedido está
+        # guardado y aparece en el panel igual.
+        "mensaje": "Recibimos tu pedido. Te escribimos para coordinar la demo.",
+        "id": r["id"],
+    }
+
+
+@app.get("/api/panel/solicitudes")
+def ver_solicitudes(perfil: Perfil = Depends(duenio_requerido)):
+    return {
+        "solicitudes": solicitudes.listar(almacen()),
+        "destino": solicitudes.destino(),
+        # Si dice "ninguna", los pedidos NO llegan por mail y hay que entrar
+        # acá a mirarlos. Mejor saberlo que enterarse por un prospecto.
+        "aviso": solicitudes.como_avisa(),
+    }
+
+
+@app.post("/api/panel/solicitudes/{id_}")
+def cambiar_solicitud(
+    id_: str, estado: str = Body(embed=True), perfil: Perfil = Depends(duenio_requerido)
+):
+    solicitudes.marcar(almacen(), id_, estado)
+    return {"ok": True}
 
 
 @app.get("/api/panel")
