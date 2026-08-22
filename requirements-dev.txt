@@ -4,3 +4,12 @@ httpx>=0.27          # lo usa fastapi.testclient
 ruff>=0.5
 PyYAML>=6.0         # lo usan los tests que leen electron-builder.yml
 openpyxl>=3.1      # informe ejecutivo en Excel (marketing/generar_informe.py)
+# Pillow NO es opcional aunque lo parezca: `tests/test_landing.py` importa
+# `marketing.generar_landing`, que importa `generar_kit` para sacar la paleta,
+# y ése abre PIL en el import. Sin Pillow, pytest no llega ni a RECOLECTAR la
+# suite — se corta con `ModuleNotFoundError` y ningún test corre.
+#
+# Estuvo faltando y no se notó durante ocho días, porque el CI estaba mudo (ver
+# la regla 22 del CLAUDE.md). Apenas volvió a correr, lo primero que encontró
+# fue esto. Lo fija `tests/test_dependencias.py`.
+Pillow>=10.0

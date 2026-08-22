@@ -272,6 +272,21 @@ una fracción de lo que cobra la competencia.
     `image/svg+xml` a la lista general. Eso reabre el agujero para lo que sube
     la gente, que es justo lo que se estaba cerrando.
 
+25. **Una dependencia que no está declarada no falla un test: impide que la
+    suite arranque.** Faltaba `Pillow` en `requirements-dev.txt`
+    (`test_landing.py` → `generar_landing` → `generar_kit` → `PIL`), y en una
+    máquina limpia pytest se corta **en la recolección**: exit code 2, cero
+    tests corridos, y el log dice `ModuleNotFoundError` en vez de "falló tal
+    test". Estuvo así ocho días sin que nadie se enterara porque el CI estaba
+    mudo (regla 22); apenas volvió a correr, fue lo primero que encontró.
+    Lo fija `tests/test_dependencias.py`, que **importa de verdad** cada módulo
+    en vez de comparar una lista de nombres — una lista escrita a mano se va a
+    olvidar del próximo igual que se olvidó de Pillow.
+    Y una lección del propio test: la primera versión buscaba el nombre en el
+    texto de `requirements-dev.txt`, así que comentar `# Pillow>=10.0` la
+    dejaba pasar. Lo descubrí saboteando el arreglo y viendo que el test NO se
+    ponía en rojo — que es exactamente para lo que sirve sabotear.
+
 ## Convenciones
 - Español rioplatense en el dominio y en los nombres de módulo, igual que
   MV Kobra AI y MV Cliente IA.
