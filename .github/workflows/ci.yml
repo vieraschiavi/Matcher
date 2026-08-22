@@ -1,9 +1,27 @@
 name: CI
 
+# ESTE WORKFLOW NO CORRIÓ NUNCA, y nadie se enteró.
+#
+# Decía `branches: [main]`, y este repositorio NO TIENE una rama `main`: la
+# única rama es la de trabajo, que además es la rama por defecto. Con ese
+# filtro, cada push se salteaba el linter y los tests en silencio — y un CI que
+# no corre es peor que no tener CI, porque la pestaña Actions en verde (vacía)
+# se lee como "pasó todo".
+#
+# `["**"]` corre en cualquier rama, que es lo que hay que querer acá: la rama
+# de trabajo cambia de nombre en cada tanda y un filtro por nombre se vuelve a
+# desincronizar. Es el mismo disparador que ya usa `apps.yml`.
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
+
+# Un push encima de otro cancela la corrida vieja: sin esto, empujar tres veces
+# seguidas deja tres corridas compitiendo y la que termina última no es
+# necesariamente la del último commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   motor:
@@ -16,6 +34,11 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements-dev.txt
+      # NSIS para que `test_el_script_del_instalador_compila` COMPILE de verdad
+      # el script del instalador en vez de saltearse. Sin esto el test hace
+      # `skip` y la pestaña queda verde sin haber probado nada — el mismo
+      # engaño que el filtro de ramas de arriba, en chiquito.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq nsis
       - run: ruff check .
       - run: python3 -m pytest -q tests/
 

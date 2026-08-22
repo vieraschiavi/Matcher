@@ -12,12 +12,22 @@ on:
       api_url:
         description: "URL del backend que va compilada en la app"
         required: false
-        default: "https://api.matcher.app"
+        # NO vuelvas a poner `api.matcher.app`: es un dominio de ejemplo que
+        # nunca existió, y una app compilada contra él abre bien y muere con
+        # "Failed to fetch" en el login, sin ninguna pista. Ya pasó.
+        default: "https://matcher-sable.vercel.app"
 
 env:
   # El bundle lleva la URL del backend adentro: en el WebView no hay
   # same-origin que valga. Se puede pisar al lanzar el workflow a mano.
-  VITE_API_URL: ${{ github.event.inputs.api_url || 'https://api.matcher.app' }}
+  #
+  # ESTE RESPALDO ES EL QUE USA CADA COMPILACIÓN AUTOMÁTICA — o sea, casi
+  # todas. Estuvo apuntando a `api.matcher.app`, un dominio de ejemplo que
+  # nunca se registró: el APK abría bien y se moría con "Failed to fetch" en el
+  # login, sin ninguna pista. El valor por defecto de `api.js` ya se había
+  # arreglado, pero acá seguía, y acá gana porque viaja compilado.
+  # `tests/test_ci.py` no deja que vuelva.
+  VITE_API_URL: ${{ github.event.inputs.api_url || 'https://matcher-sable.vercel.app' }}
 
 jobs:
   android:

@@ -233,6 +233,18 @@ una fracción de lo que cobra la competencia.
     del numerador Y del denominador, y devuelve `del_duenio` para que la UI
     diga cuántas sacó en vez de esconderlas.
 
+22. **Un CI que no corre es peor que no tener CI.** `ci.yml` estuvo filtrado a
+    `branches: [main]` y este repositorio **no tiene** una rama `main`: la
+    única es la de trabajo, que además es la rama por defecto. Resultado: cada
+    push se salteaba el linter y los 400+ tests **en silencio**, y la pestaña
+    Actions vacía se leía como "pasó todo". Ahora es `branches: ["**"]`, igual
+    que `apps.yml`, y el CI instala NSIS para que el test del instalador
+    compile de verdad en vez de saltearse. Lo fija `tests/test_ci.py`, que
+    también prohíbe que vuelva `api.matcher.app` — un dominio de ejemplo que
+    nunca se registró y que seguía como respaldo del `VITE_API_URL` de
+    `apps.yml`, o sea que **cada APK que salió del CI se compiló contra un
+    servidor inexistente** y moría con "Failed to fetch" en el login.
+
 ## Convenciones
 - Español rioplatense en el dominio y en los nombres de módulo, igual que
   MV Kobra AI y MV Cliente IA.
