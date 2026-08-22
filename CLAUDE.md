@@ -245,6 +245,17 @@ una fracción de lo que cobra la competencia.
     `apps.yml`, o sea que **cada APK que salió del CI se compiló contra un
     servidor inexistente** y moría con "Failed to fetch" en el login.
 
+23. **Las consultas de la ruta caliente no barren la tabla.** `matches` y
+    `pagos` crecen con el uso y no paran. Tres consultas hacían SCAN completo,
+    medido con 40.000 filas: el pago por referencia —que corre en **cada
+    webhook**— pasó de 1,637 ms a 0,003 ms (565x); "mis matches", que se abre
+    al entrar a la app, de 2,405 ms a 0,157 ms (15x); "mis pagos", 13x.
+    `matches` ya tenía `UNIQUE(a_id, b_id)`, que cubre el lado `a_id`; el que
+    faltaba era el lado `b_id` del `OR`, y "mis matches" pregunta por los dos.
+    Lo fija `tests/test_indices.py`, que mira el **plan de ejecución** y no los
+    milisegundos: un test que cronometra falla solo el día que el CI está
+    ocupado, y entonces se lo ignora para siempre.
+
 ## Convenciones
 - Español rioplatense en el dominio y en los nombres de módulo, igual que
   MV Kobra AI y MV Cliente IA.
