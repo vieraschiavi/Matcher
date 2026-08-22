@@ -180,6 +180,59 @@ una fracción de lo que cobra la competencia.
     — el panel avisa que los pedidos sólo se ven ahí, en vez de prometer un
     aviso que nadie manda.
 
+18. **El login tiene freno y se consulta ANTES de hashear.** Sin freno,
+    `/api/login` acepta contraseñas a la velocidad que las mande quien sea —y
+    adentro de una cuenta hay conversaciones, fotos y ubicación. El segundo
+    efecto es el que se pasa por alto: verificar una contraseña cuesta 260.000
+    iteraciones de PBKDF2 **que paga el servidor**, así que un puñado de
+    pedidos por segundo deja la app sin responder para todos. Por eso
+    `freno.espera()` se llama antes de `almacen.login`, y hay un test que
+    rompe si el pedido frenado llega a hashear.
+    Tres detalles de `matcher/freno.py`: se cuenta el intento **exista o no la
+    cuenta** (si no, el 429 contesta lo que el 401 se calla); el acierto limpia
+    los fallos **de ese email** (si no, quien te sabe el mail te traba la
+    cuenta gritando contraseñas al aire); y el freno por IP es **secundario y
+    best-effort**, porque `X-Forwarded-For` se puede mentir — el que sostiene
+    la seguridad es el de email.
+    Y en el mismo camino: cuando el email no existe se hashea igual contra
+    `seguridad.HASH_DE_DESCARTE`. El mensaje de error ya era el mismo para los
+    dos casos a propósito, pero volver sin hashear los distinguía por RELOJ
+    (~200 ms contra ~0), que enumera cuentas igual.
+
+19. **El instalador de Windows no propone el disco C.** Pedido del dueño.
+    `assets/marca/instalador.nsh` (enganchado con `nsis.include`) busca un
+    disco de datos y lo propone. Tres guardas que no se sacan: **sólo discos
+    fijos** (`GetDrives "HDD"` — instalar en un pendrive que mañana no está
+    deja un acceso directo roto y un desinstalador que no desinstala);
+    **prueba de escritura real** antes de elegirlo (no hay administrador:
+    `perMachine: false`); y **no pisa una instalación existente** (en una
+    actualización movería el programa de lugar y dejaría la copia vieja
+    ocupando disco). Si la máquina tiene un solo disco **cae en C:**, y tiene
+    que ser así: un instalador que se planta porque no encontró un `D:` no
+    instala en la mayoría de las computadoras. Un `.nsh` tampoco se prueba
+    leyéndolo: `tests/test_escritorio.py` lo COMPILA con `makensis`.
+
+20. **El archivo que se baja es el mismo para todos; lo que cambia es la
+    cuenta.** Corolario de la regla 15, escrito porque el pedido vuelve: no
+    hay un `.exe` de Gold y otro de gratis, y no puede haberlo — un binario no
+    hace cumplir un plan (se lo parchea, o se pasa el link por WhatsApp), y
+    sostener el plan en el cliente es el mismo agujero que ya se tapó en los
+    pagos (regla 14). Lo que SÍ se hace: la descarga **exige sesión** y queda
+    atribuida a la cuenta con el plan **congelado en ese momento**
+    (`panel.registrar_descarga`), y el dueño lo ve en Panel → *Cliente por
+    cliente*. Congelarlo importa: leyendo el plan actual, quien hoy es Gold
+    parecería haberlo sido siempre y se pierde el dato que sirve — que bajó
+    siendo gratis y pagó después. Lo fija
+    `tests/test_descargas_por_cliente.py`.
+
+21. **Las cuentas del dueño no cuentan como clientes que pagan.** Están en Gold
+    porque `duenio.py` se las pone. Contándolas, el panel mostraba
+    "Pagando: 2 · 66,67% de conversión" al lado de "Facturado: USD 0" — dos
+    números que se contradicen en la misma pantalla, y el equivocado era el
+    que uno mira para decidir si el negocio funciona. `panel._planes` las saca
+    del numerador Y del denominador, y devuelve `del_duenio` para que la UI
+    diga cuántas sacó en vez de esconderlas.
+
 ## Convenciones
 - Español rioplatense en el dominio y en los nombres de módulo, igual que
   MV Kobra AI y MV Cliente IA.

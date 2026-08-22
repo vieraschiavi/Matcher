@@ -248,6 +248,46 @@ revocar el certificado y comprar otro.
 
 ---
 
+## 8 bis. Las descargas y el disco donde se instala
+
+### Dónde vive el archivo que la gente baja
+
+El `.exe` pesa unos 77 MB y el APK unos 30. **No van en el repo**: Git no es un
+servidor de descargas, y un binario por versión infla el clon para siempre sin
+poder borrarlo del historial. Los arma el CI en máquinas de GitHub (gratis) y
+quedan publicados en una Release. Esa URL de Release es la que va acá:
+
+| Variable | Valor | Si falta |
+|---|---|---|
+| `MATCHER_URL_EXE` | URL del `.exe` en la Release | `/api/descargar/exe` da 404 |
+| `MATCHER_URL_APK` | URL del `.apk` | `/api/descargar/apk` da 404 |
+| `MATCHER_URL_IOS` | link de TestFlight / App Store | ídem |
+
+**La descarga exige haber iniciado sesión.** Es lo que permite responder "qué
+bajó cada cliente" en Panel → *Cliente por cliente*. Registrarse es gratis, así
+que no le cierra la puerta a nadie.
+
+Y lo que conviene tener claro: **el archivo es el mismo para todos.** No hay un
+`.exe` de Gold y otro de gratis, y no debe haberlo — un binario no puede hacer
+cumplir un plan (se lo parchea, o se pasa el link por WhatsApp). Lo que cambia
+según lo que cada uno paga lo decide el servidor cuando la persona entra con su
+cuenta, y por eso vale igual en la web, en el APK y en el `.exe`.
+
+### Que no se instale en el disco C
+
+Pedido explícito: la instalación **no** propone C: por defecto.
+`assets/marca/instalador.nsh` busca un disco de datos **fijo** (no un pendrive
+ni una unidad de red), con más de 1 GB libre, y **prueba a escribir** antes de
+proponerlo. Si lo encuentra, propone `D:\Matcher` (o la letra que sea).
+
+**Si la máquina tiene un solo disco, cae en C:** — y tiene que ser así: un
+instalador que se planta porque no encontró un `D:` no instala en la mayoría de
+las computadoras. En todos los casos la pantalla deja cambiar la carpeta.
+
+No hace falta configurar nada para esto: va adentro del instalador.
+
+---
+
 ## 9. Checklist antes de cobrarle a alguien de verdad
 
 - [ ] `MATCHER_PASARELA=mercadopago` (con `demo` **no se cobra nada**)
@@ -259,6 +299,11 @@ revocar el certificado y comprar otro.
 - [ ] `MATCHER_BD` sobre un disco que persista
 - [ ] Probado el circuito completo con una tarjeta de prueba
 - [ ] Política de privacidad publicada (la piden las dos tiendas)
+- [ ] `MATCHER_DEMO_CLAVE` cambiada — la vieja (`matcher2026`) estuvo publicada
+      en el repositorio y hay que darla por conocida
+- [ ] `RESEND_API_KEY` puesta, o asumido que los pedidos de demo sólo se ven en
+      el panel
+- [ ] `MATCHER_URL_EXE` / `MATCHER_URL_APK` apuntando a la Release publicada
 
 Para ver cómo quedó, sin exponer ninguna credencial:
 

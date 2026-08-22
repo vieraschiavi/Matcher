@@ -30,6 +30,7 @@ RAIZ = Path(__file__).resolve().parents[1]
 CONFIG = RAIZ / "electron-builder.yml"
 MAIN = RAIZ / "electron" / "main.js"
 PRELOAD = RAIZ / "electron" / "preload.js"
+NSH = RAIZ / "assets" / "marca" / "instalador.nsh"
 
 
 @pytest.fixture(scope="module")
@@ -194,3 +195,98 @@ def test_la_pagina_trae_csp_sin_eval_ni_scripts_en_linea():
     )
     for regla in ("object-src 'none'", "frame-src 'none'", "base-uri 'none'"):
         assert regla in csp, f"falta `{regla}`"
+
+
+# ---------------------------------------------------------------------------
+# Dónde se instala: el pedido es que NO vaya a C: por defecto
+# ---------------------------------------------------------------------------
+def test_el_instalador_propone_un_disco_que_no_es_el_del_sistema(config):
+    """Sin script propio, electron-builder con `perMachine: false` propone
+    %LOCALAPPDATA%\\Programs\\Matcher — o sea C:, siempre."""
+    assert NSH.exists(), "falta el script que elige el disco"
+    assert config["nsis"]["include"] == "assets/marca/instalador.nsh", (
+        "el script existe pero no está enganchado: electron-builder no lo "
+        "compila y el instalador vuelve a proponer C:"
+    )
+
+
+def test_el_script_del_disco_tiene_las_tres_guardas():
+    """Cada una de las tres evita que el instalador quede inservible para
+    alguien. Están explicadas en el encabezado del .nsh."""
+    nsh = NSH.read_text(encoding="utf-8")
+
+    # 1. Sólo discos fijos: un pendrive o una unidad de red que mañana no está
+    #    deja un acceso directo que abre un error.
+    assert '${GetDrives} "HDD"' in nsh, "enumera discos que no son fijos"
+
+    # 2. Prueba de escritura: que el disco exista y tenga lugar no quiere decir
+    #    que este usuario pueda escribir ahí (no hay administrador).
+    assert "FileOpen" in nsh and "${Errors}" in nsh, "elige el disco sin probar a escribir"
+
+    # 3. No pisa una instalación existente: hacerlo movería el programa de
+    #    lugar en una actualización y dejaría la copia vieja ocupando disco.
+    assert 'ReadRegStr $R9 HKCU "${INSTALL_REGISTRY_KEY}" "InstallLocation"' in nsh
+    assert "${If} $R9 ==" in nsh, "no chequea si ya hay una instalación"
+
+
+def test_la_letra_del_sistema_no_esta_cableada():
+    """Windows no siempre está en C:. Cablear "C" daría por bueno el disco del
+    sistema en una máquina donde el sistema está en otra letra — justo el disco
+    que el dueño no quiere."""
+    nsh = NSH.read_text(encoding="utf-8")
+    assert "$WINDIR" in nsh, "no lee la letra del sistema, la asume"
+    assert not re.search(r'\$R0\s*==\s*"C"', nsh), "cableó la letra C"
+
+
+def test_si_no_hay_otro_disco_igual_instala():
+    """La mayoría de las máquinas con Windows tienen un solo disco. Un
+    instalador que se planta porque no encontró un D: no instala en el 80% de
+    las computadoras: C: tiene que seguir siendo el respaldo."""
+    nsh = NSH.read_text(encoding="utf-8")
+    # La escritura del registro va ADENTRO del `${If} $MatcherDisco != ""`: sin
+    # disco no se escribe nada y el default de electron-builder (C:) queda.
+    assert '${If} $MatcherDisco != ""' in nsh
+    cuerpo = nsh.split('${If} $MatcherDisco != ""', 1)[1]
+    assert "WriteRegExpandStr" in cuerpo, (
+        "la propuesta de disco no está condicionada a haber encontrado uno"
+    )
+    assert "Abort" not in nsh and "Quit" not in nsh, (
+        "el instalador se planta en vez de caer en C:"
+    )
+
+
+def test_el_script_del_instalador_compila(tmp_path):
+    """UN .NSH NO SE PRUEBA LEYÉNDOLO.
+
+    Los tests de arriba miran que estén las guardas; éste comprueba que NSIS
+    lo acepte. Un `${If}` mal cerrado, un registro pisado o un callback de
+    `GetDrives` con la firma cambiada no se ven leyendo: se ven cuando el
+    empaquetado explota, y para entonces el `.exe` no existe.
+
+    Se compila con un arnés que define lo que define electron-builder e
+    inserta `preInit` donde lo inserta su plantilla. Que ARRANQUE en Windows
+    sigue sin verificarse acá — eso lo prueba correr el instalador de verdad.
+    """
+    import shutil
+    import subprocess
+
+    makensis = shutil.which("makensis")
+    if not makensis:
+        pytest.skip("makensis no instalado (apt-get install nsis)")
+
+    arnes = tmp_path / "arnes.nsi"
+    arnes.write_text(
+        '!define INSTALL_REGISTRY_KEY "Software\\\\Matcher-prueba"\n'
+        f'OutFile "{tmp_path / "salida.exe"}"\n'
+        'InstallDir "$LOCALAPPDATA\\Programs\\Matcher"\n'
+        "RequestExecutionLevel user\n"
+        f'!include "{NSH}"\n'
+        "Function .onInit\n  !insertmacro preInit\nFunctionEnd\n"
+        'Section "Principal"\n  SetOutPath "$INSTDIR"\nSectionEnd\n',
+        encoding="utf-8",
+    )
+    r = subprocess.run(
+        [makensis, "-V4", str(arnes)], capture_output=True, text=True, timeout=180
+    )
+    assert r.returncode == 0, f"el script no compila:\n{r.stdout}\n{r.stderr}"
+    assert "warning" not in r.stdout.lower(), f"NSIS avisa algo:\n{r.stdout}"

@@ -535,6 +535,22 @@ button { font-family: inherit; }
 }
 .panel-barra-valor { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* Tabla de clientes del panel. Va adentro de un contenedor con scroll propio
+   porque son cinco columnas y en el celular no entran: sin esto, la PÁGINA
+   entera scrollea de costado y toda la app queda torcida. */
+.tabla-scroll { overflow-x: auto; margin-top: 14px; border-radius: 13px; border: 1px solid var(--line); }
+.tabla-clientes { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 560px; }
+.tabla-clientes th {
+  text-align: left; padding: 10px 13px; background: var(--navy-800);
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--tenue);
+}
+.tabla-clientes td { padding: 10px 13px; border-top: 1px solid var(--line); vertical-align: top; }
+.tabla-clientes tr:hover td { background: var(--navy-800); }
+.celda-sub { display: block; font-size: 12px; color: var(--tenue); margin-top: 2px; }
+/* Un chip que NO es un botón: mismo aspecto, sin cursor de mano ni hover, para
+   que no invite a hacerle clic. */
+.chip-quieto { cursor: default; margin: 0 4px 4px 0; display: inline-block; }
+
 .pedidos { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
 .pedido {
   background: var(--navy-900); border: 1px solid var(--line); border-left: 3px solid var(--coral);

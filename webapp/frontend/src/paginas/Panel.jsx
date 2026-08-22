@@ -29,10 +29,14 @@ function Kpi({ rotulo, valor, nota, destacado }) {
 export default function Panel() {
   const [datos, setDatos] = useState(null);
   const [pedidos, setPedidos] = useState(null);
+  const [clientes, setClientes] = useState(null);
   const [error, setError] = useState("");
 
   const cargarPedidos = () =>
     api.solicitudes().then(setPedidos).catch(() => setPedidos(null));
+
+  const cargarClientes = () =>
+    api.clientes().then((r) => setClientes(r.clientes)).catch(() => setClientes(null));
 
   const marcar = async (id, estado) => {
     await api.marcarSolicitud(id, estado);
@@ -51,6 +55,7 @@ export default function Panel() {
   useEffect(() => {
     cargar();
     cargarPedidos();
+    cargarClientes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -78,14 +83,16 @@ export default function Panel() {
         {t("Lo que pasó de verdad, contado de la base. Las proyecciones son otra cosa y viven en el plan de negocio.")}
       </p>
 
-      <h3 className="panel-titulo">{t("Clientes")}</h3>
+      <h3 className="panel-titulo">{t("Cuentas")}</h3>
       <div className="grid grid-3">
         <Kpi rotulo={t("Cuentas reales")} valor={fmt(usuarios.total)} destacado
              nota={usuarios.sinteticos ? `+${fmt(usuarios.sinteticos)} ${t("sintéticos de demo")}` : null} />
         <Kpi rotulo={t("Activos 30 días")} valor={fmt(usuarios.activos_30d)} />
         <Kpi rotulo={t("Activos 7 días")} valor={fmt(usuarios.activos_7d)} />
         <Kpi rotulo={t("Pagando")} valor={fmt(datos.pagando)} destacado
-             nota={`${datos.conversion_pct}% ${t("de conversión")}`} />
+             nota={`${datos.conversion_pct}% ${t("de conversión")}${
+               planes.del_duenio ? ` · ${t("sin contar")} ${planes.del_duenio} ${t("del dueño")}` : ""
+             }`} />
         <Kpi rotulo="Plus" valor={fmt(planes.plus)} />
         <Kpi rotulo="Gold" valor={fmt(planes.gold)} />
       </div>
@@ -135,6 +142,59 @@ export default function Panel() {
         <Kpi rotulo="Windows (.exe)" valor={fmt(descargas.por_plataforma.exe)} />
         <Kpi rotulo={t("Últimos 30 días")} valor={fmt(descargas.ultimos_30d)} />
       </div>
+      {/* Con qué plan bajaron el programa. Contesta la pregunta que importa:
+          cuántos de los que se lo llevaron estaban pagando. */}
+      <div className="grid grid-3" style={{ marginTop: 10 }}>
+        {Object.entries(descargas.por_plan || {}).map(([plan, n]) => (
+          <Kpi key={plan} rotulo={`${t("Bajaron siendo")} ${plan}`} valor={fmt(n)} />
+        ))}
+      </div>
+
+      {clientes && (
+        <>
+          <h3 className="panel-titulo">
+            {t("Cliente por cliente")} ({clientes.length})
+          </h3>
+          {/* La respuesta a "¿este cliente tiene lo que pagó?". El archivo que
+              se baja es el mismo para todos —un binario no puede hacer cumplir
+              un plan— así que lo que hay que poder mirar es la CUENTA. */}
+          <p className="page-sub">
+            {t("El plan de la cuenta es lo que manda: el archivo que se baja es el mismo para todos.")}
+          </p>
+          <div className="tabla-scroll">
+            <table className="tabla-clientes">
+              <thead>
+                <tr>
+                  <th>{t("Cliente")}</th><th>{t("Plan")}</th><th>{t("Vence")}</th>
+                  <th>{t("Pagado")}</th><th>{t("Bajó")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientes.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <b>{c.nombre}</b>
+                      <span className="celda-sub">{c.email}</span>
+                    </td>
+                    <td><span className={`insignia plan-${c.plan}`}>{c.plan}</span></td>
+                    <td>{(c.plan_vence || "—").slice(0, 10)}</td>
+                    <td>{c.pagado ? plata(c.pagado, dinero.moneda) : "—"}</td>
+                    <td>
+                      {c.descargas.length === 0
+                        ? "—"
+                        : c.descargas.map((d, i) => (
+                            <span key={i} className="chip chip-quieto">
+                              {d.plataforma} · {d.plan}
+                            </span>
+                          ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {pedidos && (
         <>
