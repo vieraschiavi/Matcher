@@ -182,7 +182,10 @@ def _perfil_sintetico(rnd: random.Random, i: int, fuente: fotos.Fuente) -> Perfi
     if genero == "trans":
         genero_foto = "mujer" if nombre in NOMBRES_F else "hombre"
     for url in fuente.para(p.id, nombre, genero_foto, rnd.randint(2, 5)):
-        medios.agregar_foto(p, url)
+        # `confiable`: la demo se puebla con los avatares SVG que arma
+        # `avatares.py` cuando no hay pack de caras. Es contenido nuestro;
+        # un SVG que suba un usuario sigue rechazado (ver `medios.py`).
+        medios.agregar_foto(p, url, confiable=True)
     return p
 
 
@@ -232,7 +235,10 @@ def _cuenta_demo(
     )
 
     for url in fuente.para(p.id, nombre, genero, medios.MAX_FOTOS):
-        medios.agregar_foto(p, url)
+        # `confiable`: la demo se puebla con los avatares SVG que arma
+        # `avatares.py` cuando no hay pack de caras. Es contenido nuestro;
+        # un SVG que suba un usuario sigue rechazado (ver `medios.py`).
+        medios.agregar_foto(p, url, confiable=True)
     # Los slots de video quedan vacíos a propósito: la demo no trae videos de
     # ejemplo. La subida de hasta 2 videos por perfil funciona desde "Mi
     # perfil" y está cubierta por tests.

@@ -288,6 +288,57 @@ No hace falta configurar nada para esto: va adentro del instalador.
 
 ---
 
+## 8 ter. Lo que bloquea producción HOY
+
+Ordenado por lo que más duele. Lo de arriba no se arregla con código.
+
+### 1. La base se borra sola (BLOQUEANTE)
+
+`/api/salud` dice `"almacenamiento_efimero": true`. En Vercel el único
+directorio escribible es `/tmp`, cada instancia tiene el suyo, y se vacía en
+el próximo arranque en frío. **Las cuentas que crea la gente se pierden.**
+
+No es un bug: es que Vercel no sirve para esto. Hace falta un servicio con
+disco de verdad — Railway o Render, ambos con plan gratuito o de pocos
+dólares, montando un volumen y apuntando `MATCHER_BD` ahí:
+
+| Variable | Valor |
+|---|---|
+| `MATCHER_BD` | `/datos/matcher.db` (la ruta del volumen montado) |
+| `MATCHER_SECRETO` | 48 caracteres al azar, o las sesiones se caen al reiniciar |
+
+Comprobalo después de desplegar:
+
+```bash
+curl https://tu-dominio/api/salud
+# almacenamiento_efimero tiene que decir false
+```
+
+### 2. Los pagos están en modo demo
+
+`MATCHER_PASARELA` viene en `demo`, que **no mueve plata** y lo dice en
+pantalla. Sección 3 de este documento para conectar MercadoPago de verdad.
+Hasta que eso esté, el producto no cobra.
+
+### 3. Sin firma, Windows dice "editor desconocido"
+
+El instalador se arma y funciona, pero sin certificado de firma de código
+SmartScreen muestra el cartel la primera vez. No rompe nada; espanta a la
+mitad de los que lo bajan. El certificado se compra aparte (sección 8) y la
+clave **no va al repo**.
+
+### 4. El login con Google no existe todavía
+
+Sin `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` el botón simplemente no
+aparece — a propósito, no hay modo simulado. Sección 6.
+
+### 5. La clave de demo está quemada
+
+`matcher2026` estuvo publicada en la pantalla de entrada y en el repositorio
+público. Cambiá `MATCHER_DEMO_CLAVE`.
+
+---
+
 ## 9. Checklist antes de cobrarle a alguien de verdad
 
 - [ ] `MATCHER_PASARELA=mercadopago` (con `demo` **no se cobra nada**)

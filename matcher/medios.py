@@ -42,18 +42,43 @@ _TIPOS_DATA = {
     "video": ("data:video/mp4", "data:video/quicktime", "data:video/webm"),
 }
 
+# SVG APARTE, Y NO POR CAPRICHO. Un SVG no es una imagen como las otras: es un
+# documento XML que puede traer `<script>` adentro. En un `<img>` no se ejecuta,
+# pero basta que alguien abra la URL en una pestaña —o que un cliente futuro la
+# meta en un `<object>`— para que sea XSS con la cara de una foto de perfil.
+#
+# La app SÍ genera SVG: `avatares.py` arma el avatar de respaldo cuando no hay
+# pack de caras, y la demo se puebla con eso. Ése es contenido nuestro, armado
+# acá, sin nada de afuera.
+#
+# Por eso la lista de arriba vale para lo que sube el usuario y ésta sólo para
+# lo que genera el programa. El endpoint HTTP nunca pasa `confiable=True`: la
+# única forma de que entre un SVG es que lo haya hecho el propio código.
+_TIPOS_DATA_INTERNOS = {"foto": ("data:image/svg+xml",), "video": ()}
 
-def _extension_valida(url: str, formatos: tuple[str, ...], clase: str = "foto") -> bool:
+
+def _extension_valida(
+    url: str, formatos: tuple[str, ...], clase: str = "foto", confiable: bool = False
+) -> bool:
     limpio = url.split("?")[0].lower()
     if limpio.startswith("data:"):
-        return limpio.startswith(_TIPOS_DATA[clase])
+        permitidos = _TIPOS_DATA[clase] + (
+            _TIPOS_DATA_INTERNOS[clase] if confiable else ()
+        )
+        return limpio.startswith(permitidos)
     return limpio.endswith(formatos)
 
 
-def agregar_foto(perfil: Perfil, url: str, *, bytes_: int | None = None) -> Media:
+def agregar_foto(
+    perfil: Perfil, url: str, *, bytes_: int | None = None, confiable: bool = False
+) -> Media:
+    """`confiable=True` sólo para contenido que genera el propio programa
+    (el avatar de respaldo de `avatares.py`, que es un SVG). Nunca lo pases
+    desde un handler HTTP: es lo único que separa "nuestro SVG" de "un SVG
+    con un script adentro que subió un desconocido"."""
     if len(perfil.fotos) >= MAX_FOTOS:
         raise DatosInvalidos(f"ya tenés {MAX_FOTOS} fotos; borrá una para subir otra")
-    if not _extension_valida(url, FORMATOS_FOTO, "foto"):
+    if not _extension_valida(url, FORMATOS_FOTO, "foto", confiable):
         raise DatosInvalidos(f"formato de foto no soportado ({', '.join(FORMATOS_FOTO)})")
     if bytes_ is not None and bytes_ > MAX_BYTES_FOTO:
         raise DatosInvalidos("la foto pesa más de 8 MB")
@@ -63,11 +88,12 @@ def agregar_foto(perfil: Perfil, url: str, *, bytes_: int | None = None) -> Medi
 
 
 def agregar_video(
-    perfil: Perfil, url: str, *, segundos: float | None = None, bytes_: int | None = None
+    perfil: Perfil, url: str, *, segundos: float | None = None,
+    bytes_: int | None = None, confiable: bool = False,
 ) -> Media:
     if len(perfil.videos) >= MAX_VIDEOS:
         raise DatosInvalidos(f"ya tenés {MAX_VIDEOS} videos; borrá uno para subir otro")
-    if not _extension_valida(url, FORMATOS_VIDEO, "video"):
+    if not _extension_valida(url, FORMATOS_VIDEO, "video", confiable):
         raise DatosInvalidos(f"formato de video no soportado ({', '.join(FORMATOS_VIDEO)})")
     if segundos is not None and segundos > MAX_SEGUNDOS_VIDEO:
         raise DatosInvalidos(f"el video no puede pasar de {MAX_SEGUNDOS_VIDEO} segundos")

@@ -234,10 +234,13 @@ una fracción de lo que cobra la competencia.
     diga cuántas sacó en vez de esconderlas.
 
 22. **Un CI que no corre es peor que no tener CI.** `ci.yml` estuvo filtrado a
-    `branches: [main]` y este repositorio **no tiene** una rama `main`: la
-    única es la de trabajo, que además es la rama por defecto. Resultado: cada
-    push se salteaba el linter y los 400+ tests **en silencio**, y la pestaña
-    Actions vacía se leía como "pasó todo". Ahora es `branches: ["**"]`, igual
+    `branches: [main]`. Hubo una rama `main` —los PR #1 y #2 se mergearon ahí
+    el 14 de agosto y el CI corrió— pero después **desapareció**: hoy la única
+    rama es la de trabajo, que además es la rama por defecto. Desde entonces,
+    cada push se salteó el linter y los 400+ tests **en silencio**, y la
+    pestaña Actions sin corridas nuevas se leía como "no pasó nada malo".
+    Un filtro por nombre de rama es una bomba de tiempo: la rama se renombra o
+    se borra y el CI se apaga sin avisar. Por eso ahora es `["**"]`. Ahora es `branches: ["**"]`, igual
     que `apps.yml`, y el CI instala NSIS para que el test del instalador
     compile de verdad en vez de saltearse. Lo fija `tests/test_ci.py`, que
     también prohíbe que vuelva `api.matcher.app` — un dominio de ejemplo que
@@ -255,6 +258,19 @@ una fracción de lo que cobra la competencia.
     Lo fija `tests/test_indices.py`, que mira el **plan de ejecución** y no los
     milisegundos: un test que cronometra falla solo el día que el CI está
     ocupado, y entonces se lo ignora para siempre.
+
+24. **El SVG entra sólo del lado de adentro.** Un SVG no es una imagen como
+    las otras: es un documento XML que puede traer `<script>`. En un `<img>` no
+    se ejecuta, pero basta abrir la URL en una pestaña —o que un cliente futuro
+    la meta en un `<object>`— para que sea XSS con la cara de una foto de
+    perfil. La app SÍ genera SVG (`avatares.py`, el avatar de respaldo cuando
+    no hay pack de caras), y por eso `medios.agregar_foto` tiene
+    `confiable=True`: lo pasa `demo.py`, **nunca un handler HTTP**. Hay un test
+    que falla si aparece `confiable=True` en `api.py`.
+    Ojo con el orden en que se descubre esto: apretar la validación de
+    `data:` rompió la siembra de la demo, y la tentación es agregar
+    `image/svg+xml` a la lista general. Eso reabre el agujero para lo que sube
+    la gente, que es justo lo que se estaba cerrando.
 
 ## Convenciones
 - Español rioplatense en el dominio y en los nombres de módulo, igual que

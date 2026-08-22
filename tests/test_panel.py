@@ -126,15 +126,25 @@ def test_una_plataforma_inventada_no_entra(almacen):
     assert panel.resumen(almacen)["descargas"]["total"] == 0
 
 
-def test_no_se_guarda_nada_que_identifique_a_la_persona(almacen):
-    """Para saber cuántos bajaron el programa no hace falta saber quiénes son.
-    Si mañana alguien agrega una columna `ip`, que se entere acá."""
+def test_no_se_guarda_la_ip_de_quien_baja(almacen):
+    """ESTE TEST CAMBIÓ DE ALCANCE, Y CONVIENE SABER POR QUÉ.
+
+    Antes exigía que la descarga fuera anónima del todo. El dueño pidió después
+    poder ver qué bajó cada cliente, así que ahora sí se guarda `usuario_id` —
+    es su propia cuenta, en su propio producto, y la descarga exige sesión.
+
+    Lo que NO cambia es la IP: para responder "quién bajó qué" alcanza con la
+    cuenta, que ya la tenemos. La IP no agrega nada a esa pregunta y es un dato
+    personal más que se puede filtrar. Si mañana alguien agrega esa columna,
+    que se entere acá.
+    """
     panel.registrar_descarga(almacen, "apk", referente="https://matcher.app/es/")
     columnas = {
         f[1] for f in almacen.con.execute("PRAGMA table_info(descargas)").fetchall()
     }
-    assert columnas == {"id", "plataforma", "referente", "momento"}, columnas
-    assert "ip" not in columnas and "usuario_id" not in columnas
+    assert columnas == {"id", "plataforma", "referente", "usuario_id", "plan", "momento"}, columnas
+    for prohibida in ("ip", "user_agent", "huella"):
+        assert prohibida not in columnas, f"la descarga guarda `{prohibida}`"
 
 
 def test_el_dinero_por_mes_queda_ordenado(almacen, hacer_perfil):
@@ -158,14 +168,21 @@ def test_el_dinero_por_mes_queda_ordenado(almacen, hacer_perfil):
 def test_sin_url_publicada_no_manda_a_ningun_lado(cliente, monkeypatch):
     """Mejor un 404 honesto que redirigir a una URL rota."""
     monkeypatch.delenv("MATCHER_URL_APK", raising=False)
-    assert cliente.get("/api/descargar/apk", follow_redirects=False).status_code == 404
+    cab = cuenta(cliente, "espera@test.local")
+    assert cliente.get(
+        "/api/descargar/apk", headers=cab, follow_redirects=False
+    ).status_code == 404
 
 
 def test_la_descarga_redirige_y_queda_contada(cliente, monkeypatch):
     monkeypatch.setenv("MATCHER_URL_APK", "https://ejemplo.test/matcher.apk")
     monkeypatch.setenv("MATCHER_CUENTAS_DUENIO", "duenia@test.local")
 
-    r = cliente.get("/api/descargar/apk", follow_redirects=False)
+    # La descarga exige sesión desde que el dueño pidió ver qué bajó cada
+    # cliente: sin cuenta no se puede atribuir a nadie. Ver
+    # `tests/test_descargas_por_cliente.py`.
+    quien = cuenta(cliente, "baja@test.local")
+    r = cliente.get("/api/descargar/apk", headers=quien, follow_redirects=False)
     assert r.status_code == 302
     assert r.headers["location"] == "https://ejemplo.test/matcher.apk"
 
@@ -176,11 +193,24 @@ def test_la_descarga_redirige_y_queda_contada(cliente, monkeypatch):
 
 
 def test_una_plataforma_que_no_existe_da_404(cliente):
-    assert cliente.get("/api/descargar/windows95").status_code == 404
+    cab = cuenta(cliente, "curiosa@test.local")
+    assert cliente.get("/api/descargar/windows95", headers=cab).status_code == 404
 
 
-def test_la_descarga_no_pide_sesion(cliente, monkeypatch):
-    """Bajar el programa es libre: el plan se decide al entrar, no al bajar."""
+def test_la_descarga_pide_sesion_pero_no_pide_pagar(cliente, monkeypatch):
+    """ESTE TEST SE DIO VUELTA A MEDIAS.
+
+    Antes: "bajar el programa es libre" — sin sesión. Ahora hace falta cuenta,
+    porque el dueño pidió ver qué bajó cada cliente y una descarga anónima no
+    se atribuye a nadie.
+
+    Lo que NO cambió, y es la mitad que importa: **el plan no se pide para
+    bajar**. Una cuenta gratis recién creada baja el mismo archivo que una
+    Gold. Registrarse es gratis; el plan se decide al ENTRAR, no al bajar.
+    """
     monkeypatch.setenv("MATCHER_URL_EXE", "https://ejemplo.test/Matcher.exe")
-    r = cliente.get("/api/descargar/exe", follow_redirects=False)
-    assert r.status_code == 302
+    assert cliente.get("/api/descargar/exe", follow_redirects=False).status_code == 401
+
+    cab = cuenta(cliente, "reciencita@test.local")   # plan gratis, recién creada
+    r = cliente.get("/api/descargar/exe", headers=cab, follow_redirects=False)
+    assert r.status_code == 302, "una cuenta gratis no pudo bajar el programa"
