@@ -33,6 +33,19 @@ VIDA_SESION_SEG = 30 * 24 * 3600
 _SECRETO_PROCESO = secrets.token_bytes(32)
 
 
+# Hash de una contraseña que no es de nadie. Se verifica contra éste cuando el
+# email no existe, para que errar el mail cueste lo mismo que errar la clave.
+# Ver `Almacen.login`. Se calcula una vez, al importar: hacerlo en cada intento
+# fallido costaría el doble de PBKDF2 que un intento normal, y esa diferencia
+# también se mide con un cronómetro.
+HASH_DE_DESCARTE = (
+    f"{ALGORITMO}${ITERACIONES}$"
+    + "00" * 16
+    + "$"
+    + hashlib.pbkdf2_hmac("sha256", secrets.token_bytes(32), bytes(16), ITERACIONES).hex()
+)
+
+
 def hashear(clave: str) -> str:
     if len(clave or "") < 8:
         raise ValueError("la contraseña tiene que tener al menos 8 caracteres")

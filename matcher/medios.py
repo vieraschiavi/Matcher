@@ -29,17 +29,31 @@ MAX_BYTES_FOTO = 8 * 1024 * 1024
 MAX_BYTES_VIDEO = 40 * 1024 * 1024
 
 
-def _extension_valida(url: str, formatos: tuple[str, ...]) -> bool:
+# Qué puede haber adentro de un data-URI. El comentario de antes decía que "el
+# tipo va en el propio prefijo" y era cierto — pero NADIE lo miraba: cualquier
+# cosa que empezara con `data:` pasaba, `data:text/html,<script>…` incluido.
+# Como foto no se renderiza (la CSP no ejecuta scripts y un `<img>` con HTML
+# adentro no hace nada), pero una URL de perfil termina en muchos lados con el
+# tiempo —un enlace, un `open()`, un cliente futuro— y ahí sí es un problema.
+# Se valida el prefijo y listo, que era lo que el comentario ya prometía.
+_TIPOS_DATA = {
+    "foto": ("data:image/jpeg", "data:image/jpg", "data:image/png",
+             "data:image/webp", "data:image/heic"),
+    "video": ("data:video/mp4", "data:video/quicktime", "data:video/webm"),
+}
+
+
+def _extension_valida(url: str, formatos: tuple[str, ...], clase: str = "foto") -> bool:
     limpio = url.split("?")[0].lower()
     if limpio.startswith("data:"):
-        return True  # data-URI de la demo; el tipo va en el propio prefijo
+        return limpio.startswith(_TIPOS_DATA[clase])
     return limpio.endswith(formatos)
 
 
 def agregar_foto(perfil: Perfil, url: str, *, bytes_: int | None = None) -> Media:
     if len(perfil.fotos) >= MAX_FOTOS:
         raise DatosInvalidos(f"ya tenés {MAX_FOTOS} fotos; borrá una para subir otra")
-    if not _extension_valida(url, FORMATOS_FOTO):
+    if not _extension_valida(url, FORMATOS_FOTO, "foto"):
         raise DatosInvalidos(f"formato de foto no soportado ({', '.join(FORMATOS_FOTO)})")
     if bytes_ is not None and bytes_ > MAX_BYTES_FOTO:
         raise DatosInvalidos("la foto pesa más de 8 MB")
@@ -53,7 +67,7 @@ def agregar_video(
 ) -> Media:
     if len(perfil.videos) >= MAX_VIDEOS:
         raise DatosInvalidos(f"ya tenés {MAX_VIDEOS} videos; borrá uno para subir otro")
-    if not _extension_valida(url, FORMATOS_VIDEO):
+    if not _extension_valida(url, FORMATOS_VIDEO, "video"):
         raise DatosInvalidos(f"formato de video no soportado ({', '.join(FORMATOS_VIDEO)})")
     if segundos is not None and segundos > MAX_SEGUNDOS_VIDEO:
         raise DatosInvalidos(f"el video no puede pasar de {MAX_SEGUNDOS_VIDEO} segundos")

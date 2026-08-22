@@ -47,15 +47,30 @@ def _uno(con, sql: str, *args) -> int:
     return (fila[0] or 0) if fila else 0
 
 
-def registrar_descarga(almacen, plataforma: str, referente: str = "") -> None:
-    """Una descarga más. No guarda IP ni nada que identifique a la persona:
-    para saber cuántos bajaron el programa no hace falta saber quiénes son, y
-    un dato personal que no se guarda es un dato que no se puede filtrar."""
+def registrar_descarga(almacen, plataforma: str, referente: str = "", perfil=None) -> None:
+    """Una descarga más, con la cuenta que la bajó y el plan que tenía.
+
+    NO se guarda la IP. Para responder "quién bajó qué" alcanza con la cuenta,
+    que ya la tenemos porque la descarga exige sesión; la IP no agrega nada a
+    esa pregunta y es un dato personal más que se puede filtrar.
+
+    El plan va CONGELADO acá y no se lee del perfil al mirar el panel: si se
+    leyera después, un cliente que hoy es Gold figuraría como si siempre lo
+    hubiera sido, y se perdería justo el dato que sirve — que bajó el programa
+    siendo gratis y pagó más tarde.
+    """
     if plataforma not in PLATAFORMAS:
         return
     almacen.con.execute(
-        "INSERT INTO descargas (plataforma, referente, momento) VALUES (?,?,?)",
-        (plataforma, (referente or "")[:120], datetime.utcnow().isoformat()),
+        "INSERT INTO descargas (plataforma, referente, usuario_id, plan, momento) "
+        "VALUES (?,?,?,?,?)",
+        (
+            plataforma,
+            (referente or "")[:120],
+            getattr(perfil, "id", "") or "",
+            getattr(perfil, "plan", "") or "",
+            datetime.utcnow().isoformat(),
+        ),
     )
     almacen.con.commit()
 
@@ -85,14 +100,32 @@ def _usuarios(con) -> dict:
 
 
 def _planes(con) -> dict:
+    """Cuántas cuentas hay en cada plan, SIN las del dueño.
+
+    Las cuentas de `MATCHER_CUENTAS_DUENIO` están en Gold porque `duenio.py`
+    se las pone, no porque hayan pagado. Contarlas acá inflaba las dos cifras
+    que este panel existe para responder: en una base recién estrenada decía
+    "Pagando: 2 · 66,67% de conversión" al lado de "Facturado: USD 0" — dos
+    números que se contradicen en la misma pantalla, y el equivocado es el que
+    uno mira para decidir si el negocio funciona.
+
+    La plata nunca estuvo mal (`_dinero` sólo suma cobros reales); lo que
+    estaba mal era el CONTEO de clientes que pagan.
+    """
+    from . import duenio
+
+    del_duenio = duenio.emails()
     salida = {}
     for codigo in ("gratis", "plus", "gold"):
-        salida[codigo] = _uno(
-            con,
-            "SELECT COUNT(*) FROM perfiles WHERE json_extract(datos, '$.plan') = ? "
+        filas = con.execute(
+            "SELECT email FROM perfiles WHERE json_extract(datos, '$.plan') = ? "
             "AND datos NOT LIKE '%\"sintetico\": true%'",
-            codigo,
+            (codigo,),
+        ).fetchall()
+        salida[codigo] = sum(
+            1 for f in filas if (f["email"] or "").strip().lower() not in del_duenio
         )
+    salida["del_duenio"] = len(del_duenio)
     return salida
 
 
@@ -126,11 +159,77 @@ def _dinero(con) -> dict:
 def _descargas(con) -> dict:
     total = {p: _uno(con, "SELECT COUNT(*) FROM descargas WHERE plataforma = ?", p)
              for p in PLATAFORMAS}
+    por_plan = {
+        f["plan"] or "(anónima)": f["c"]
+        for f in con.execute(
+            "SELECT plan, COUNT(*) c FROM descargas GROUP BY plan"
+        ).fetchall()
+    }
     return {
         "por_plataforma": total,
+        # Con qué plan bajaron el programa. `(anónima)` son las descargas de
+        # antes de que la descarga exigiera cuenta: de ésas no se sabe quién
+        # fue, y decirlo es mejor que meterlas en "gratis" y ensuciar el dato.
+        "por_plan": por_plan,
         "total": sum(total.values()),
         "ultimos_30d": _uno(con, "SELECT COUNT(*) FROM descargas WHERE momento >= ?", _iso(30)),
     }
+
+
+def clientes(almacen, limite: int = 500) -> list[dict]:
+    """Cliente por cliente: qué plan tiene, hasta cuándo, cuánto pagó y qué
+    bajó. Es la vista que contesta "¿este cliente tiene lo que pagó?" sin
+    abrir la base.
+
+    Sólo cuentas REALES: los perfiles sintéticos de la demo no son clientes y
+    mezclarlos acá convierte la lista en un número inventado.
+
+    No incluye la contraseña ni el hash, obviamente, pero tampoco la bio, las
+    fotos ni la ubicación: esto es la vista comercial, no una ventana a la
+    cuenta de la gente. Un panel de administración que muestra el perfil
+    entero es la forma más común de que un dato personal termine donde no va.
+    """
+    import json as _json
+
+    filas = almacen.con.execute(
+        "SELECT id, email, datos FROM perfiles "
+        "WHERE datos NOT LIKE '%\"sintetico\": true%' "
+        "ORDER BY json_extract(datos, '$.ultima_actividad') DESC LIMIT ?",
+        (limite,),
+    ).fetchall()
+
+    pagado: dict[str, float] = {}
+    for f in almacen.con.execute(
+        "SELECT usuario_id, SUM(monto) t FROM pagos WHERE estado = 'pagado' "
+        "GROUP BY usuario_id"
+    ).fetchall():
+        pagado[f["usuario_id"]] = round(f["t"] or 0.0, 2)
+
+    bajadas: dict[str, list] = {}
+    for f in almacen.con.execute(
+        "SELECT usuario_id, plataforma, plan, momento FROM descargas "
+        "WHERE usuario_id <> '' ORDER BY momento DESC"
+    ).fetchall():
+        bajadas.setdefault(f["usuario_id"], []).append(
+            {"plataforma": f["plataforma"], "plan": f["plan"], "momento": f["momento"]}
+        )
+
+    salida = []
+    for f in filas:
+        d = _json.loads(f["datos"]) if f["datos"] else {}
+        if d.get("borrada"):
+            continue
+        salida.append({
+            "id": f["id"],
+            "email": f["email"],
+            "nombre": d.get("nombre", ""),
+            "plan": d.get("plan", "gratis"),
+            "plan_vence": d.get("plan_vence"),
+            "pagado": pagado.get(f["id"], 0.0),
+            "descargas": bajadas.get(f["id"], []),
+            "ultima_actividad": d.get("ultima_actividad"),
+        })
+    return salida
 
 
 def _actividad(con) -> dict:
@@ -147,7 +246,10 @@ def resumen(almacen) -> dict:
     usuarios = _usuarios(con)
     planes_ = _planes(con)
     pagando = planes_["plus"] + planes_["gold"]
-    base = usuarios["total"] or 1
+    # La base de la conversión también saca las cuentas del dueño: si están
+    # arriba y abajo de la división, el porcentaje sale de comparar clientes
+    # con no-clientes.
+    base = max(1, usuarios["total"] - planes_["del_duenio"])
     return {
         "momento": datetime.utcnow().isoformat(),
         "usuarios": usuarios,

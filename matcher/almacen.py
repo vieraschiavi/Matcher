@@ -194,6 +194,13 @@ CREATE TABLE IF NOT EXISTS descargas (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     plataforma TEXT NOT NULL,
     referente  TEXT NOT NULL DEFAULT '',
+    -- Quién la bajó y con qué plan la bajó. `plan` se guarda CONGELADO en el
+    -- momento de la descarga: si se leyera del perfil al mirar el panel, un
+    -- cliente que hoy es Gold aparecería como si siempre lo hubiera sido, y se
+    -- perdería el dato que importa — que bajó el programa siendo gratis y
+    -- pagó después.
+    usuario_id TEXT NOT NULL DEFAULT '',
+    plan       TEXT NOT NULL DEFAULT '',
     momento    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_descarga_momento ON descargas(momento);
@@ -214,6 +221,15 @@ CREATE TABLE IF NOT EXISTS solicitudes_demo (
     momento TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_solicitud_email ON solicitudes_demo(email, momento);
+-- Intentos fallidos de login, para el freno de `matcher/freno.py`. Sin id ni
+-- usuario a propósito: acá no se guarda quién erró la contraseña, sólo que
+-- alguien lo hizo contra esta llave. Un log de intentos fallidos con la cuenta
+-- adentro es una lista de "estas cuentas existen" para el que entre a la base.
+CREATE TABLE IF NOT EXISTS intentos_login (
+    llave   TEXT NOT NULL,
+    momento TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_intento_llave ON intentos_login(llave, momento);
 CREATE TABLE IF NOT EXISTS altas_pendientes (
     token     TEXT PRIMARY KEY,
     proveedor TEXT NOT NULL,
@@ -288,6 +304,17 @@ class Almacen:
             )
         except sqlite3.OperationalError:
             pass
+        # Quién bajó el programa y con qué plan lo hizo. Antes la descarga era
+        # anónima; el dueño pidió poder ver, cliente por cliente, qué bajó cada
+        # uno. Las descargas viejas quedan con la columna vacía, que es lo
+        # honesto: de ésas no se sabe quién fue.
+        for columna in ("usuario_id", "plan"):
+            try:
+                con.execute(
+                    f"ALTER TABLE descargas ADD COLUMN {columna} TEXT NOT NULL DEFAULT ''"
+                )
+            except sqlite3.OperationalError:
+                pass
         con.commit()
 
     def _nueva_conexion(self) -> sqlite3.Connection:
@@ -460,7 +487,16 @@ class Almacen:
             "SELECT id, clave_hash, datos FROM perfiles WHERE email = ?",
             (email.strip().lower(),),
         ).fetchone()
-        if not fila or not seguridad.verificar(clave, fila["clave_hash"]):
+        if not fila:
+            # Se hashea igual contra un hash de descarte. Sin esto, un email
+            # que no existe contesta al instante y uno que sí existe tarda los
+            # ~200 ms de PBKDF2: el mensaje de error es el mismo para los dos
+            # —está puesto así a propósito, arriba en la API— pero el RELOJ los
+            # distingue, y enumerar cuentas por tiempo de respuesta es tan
+            # fácil como enumerarlas por texto.
+            seguridad.verificar(clave, seguridad.HASH_DE_DESCARTE)
+            return None
+        if not seguridad.verificar(clave, fila["clave_hash"]):
             return None
         perfil = self._desde_json(fila["datos"])
         if not perfil.activo:

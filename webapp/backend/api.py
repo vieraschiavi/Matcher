@@ -31,6 +31,7 @@ from matcher import (
     demo,
     duenio,
     filtros,
+    freno,
     geo,
     medios,
     oauth,
@@ -409,12 +410,30 @@ def registro(datos: Registro):
 
 
 @app.post("/api/login")
-def login(datos: Credenciales):
-    sesion = almacen().login(datos.email, datos.clave)
+def login(datos: Credenciales, request: Request):
+    a = almacen()
+    llaves = freno.llaves(datos.email, freno.ip_de(request))
+
+    # El freno se consulta ANTES de verificar la contraseña. Verificarla cuesta
+    # 260.000 iteraciones de PBKDF2 —caro a propósito— y las paga el servidor:
+    # si el frenado igual llegara al hash, frenarlo evitaría el acierto pero no
+    # el DoS. Ver `matcher/freno.py`.
+    if (faltan := freno.espera(a, llaves)) > 0:
+        raise HTTPException(
+            429,
+            "demasiados intentos; probá de nuevo en un rato",
+            headers={"Retry-After": str(faltan)},
+        )
+
+    sesion = a.login(datos.email, datos.clave)
     if not sesion:
+        freno.anotar_fallo(a, llaves)
         # Mismo mensaje para email inexistente y clave errada: distinguirlos
-        # convierte el login en un enumerador de cuentas.
+        # convierte el login en un enumerador de cuentas. El freno cuenta el
+        # intento exista o no la cuenta, por lo mismo: si sólo se frenaran los
+        # emails registrados, el 429 sería la respuesta que el 401 se calla.
         raise HTTPException(401, "email o contraseña incorrectos")
+    freno.limpiar_email(a, datos.email)
     perfil, token = sesion
     # Las cuentas del dueño quedan en Gold sin pasar por la caja. La lista sale
     # de una variable de entorno y viene vacía por defecto: sin configurarla,
@@ -1003,9 +1022,29 @@ def ver_panel(perfil: Perfil = Depends(duenio_requerido)):
     return panel.resumen(almacen())
 
 
+@app.get("/api/panel/clientes")
+def panel_clientes(perfil: Perfil = Depends(duenio_requerido)):
+    """Cliente por cliente: plan, vencimiento, cuánto pagó y qué bajó."""
+    return {"clientes": panel.clientes(almacen())}
+
+
 @app.get("/api/descargar/{plataforma}")
-def descargar(plataforma: str, request: Request):
-    """Cuenta la descarga y manda al archivo de verdad.
+def descargar(plataforma: str, request: Request, perfil: Perfil = Depends(usuario)):
+    """Cuenta la descarga —con la cuenta que la pidió— y manda al archivo.
+
+    POR QUÉ EXIGE SESIÓN. El dueño quiere saber qué bajó cada cliente. Una
+    descarga anónima no se puede atribuir a nadie: quedaba un contador y nada
+    más. Con la sesión, cada descarga tiene nombre y plan (ver
+    `panel.registrar_descarga`), y eso alimenta `/api/panel/clientes`.
+    Registrarse es gratis, así que esto no le cierra la puerta a nadie.
+
+    LO QUE ESTO **NO** ES, Y CONVIENE TENERLO CLARO. El archivo que se baja es
+    el MISMO para todos. No hay un `.exe` de Gold y otro de gratis, y no debe
+    haberlo: un binario no puede hacer cumplir un plan —se lo parchea, o se
+    pasa el link por WhatsApp— así que un "instalador Gold" sería una promesa
+    que el archivo no puede sostener. Lo que cambia según lo que cada uno paga
+    lo decide el SERVIDOR cuando la persona entra con su cuenta, y por eso vale
+    igual en la web, en el APK y en el `.exe` (regla 15).
 
     La URL real sale de una variable de entorno (`MATCHER_URL_APK`,
     `MATCHER_URL_EXE`): el binario no se sirve desde acá — pesa 77 MB y este
@@ -1024,7 +1063,7 @@ def descargar(plataforma: str, request: Request):
         raise HTTPException(404, f"todavía no hay descarga publicada para {plataforma}")
 
     panel.registrar_descarga(
-        almacen(), plataforma, request.headers.get("referer", "")
+        almacen(), plataforma, request.headers.get("referer", ""), perfil=perfil
     )
     return RedirectResponse(destino, status_code=302)
 

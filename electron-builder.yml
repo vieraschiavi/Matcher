@@ -63,6 +63,12 @@ win:
   artifactName: Matcher-${version}-instalador.${ext}
 
 nsis:
+  # Script propio que decide QUÉ CARPETA VIENE PROPUESTA. El pedido del dueño
+  # es que no vaya al disco C por defecto: `instalador.nsh` busca un disco de
+  # datos fijo y escribible y propone ése. Si la máquina tiene un solo disco
+  # —que es el caso de la mayoría— cae en C:, porque la alternativa es un
+  # instalador que no instala. Está explicado adentro del archivo.
+  include: assets/marca/instalador.nsh
   # oneClick: false es lo que convierte esto en un instalador con pantallas en
   # vez de uno que se instala solo donde él quiere. Sin esto, "elegir dónde
   # instalar" no existe: la opción de abajo se ignora.
