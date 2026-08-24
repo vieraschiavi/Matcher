@@ -287,6 +287,31 @@ una fracción de lo que cobra la competencia.
     dejaba pasar. Lo descubrí saboteando el arreglo y viendo que el test NO se
     ponía en rojo — que es exactamente para lo que sirve sabotear.
 
+26. **Un aviso no puede costar una venta.** `alertas.py` avisa por mail cuando
+    alguien abre el checkout (intención) y cuando la pasarela acredita
+    (cobrado). Tres cosas que no se tocan:
+    · **Se dispara en el SERVIDOR**, en `pagos.iniciar`, no en un `onClick`: un
+      click del navegador se pierde con un bloqueador, se repite si la persona
+      insiste, y lo manda el cliente, así que no se puede creer.
+    · **Va en segundo plano** (`aviso.mandar_en_segundo_plano`): el usuario está
+      esperando el redirect a la pasarela, y una llamada HTTP más con su timeout
+      en el camino crítico de una compra cuesta ventas. El hilo es `daemon`: se
+      pierde el AVISO si el proceso muere, nunca el pago, que ya está en la base.
+    · **`@_nunca_explota`**, y no es decoración defensiva: el test
+      `test_si_el_mail_explota_la_compra_sigue` lo encontró en rojo. El
+      encabezado ya decía "nunca levanta" y el código no lo cumplía — alcanzaba
+      con que fallara la consulta de contexto para que la excepción subiera por
+      `pagos.iniciar` y se llevara el checkout. La herramienta que existe para
+      no perder ventas pasaba a perderlas, y sólo cuando el correo está caído:
+      el día que menos se lo mira.
+    El envío vive en `aviso.py`, compartido con `solicitudes.py`. Estaba adentro
+    de ese módulo y se iba a copiar; dos copias del mismo envío se
+    desincronizan a la primera.
+    Y lo que esto NO es: no sirve para vender desde un hosting que prohíbe el
+    uso comercial. El sitio ya ofrece la venta desde que está publicado, y la
+    alerta corre adentro de ese mismo backend — si lo suspenden, se apaga junto
+    con la venta. Es un medidor de demanda.
+
 ## Convenciones
 - Español rioplatense en el dominio y en los nombres de módulo, igual que
   MV Kobra AI y MV Cliente IA.
