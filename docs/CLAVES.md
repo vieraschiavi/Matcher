@@ -345,27 +345,49 @@ No hace falta configurar nada para esto: va adentro del instalador.
 
 Ordenado por lo que más duele. Lo de arriba no se arregla con código.
 
-### 1. La base se borra sola (BLOQUEANTE)
+### 1. La base se borra sola (BLOQUEANTE) — mover a Railway
 
 `/api/salud` dice `"almacenamiento_efimero": true`. En Vercel el único
-directorio escribible es `/tmp`, cada instancia tiene el suyo, y se vacía en
-el próximo arranque en frío. **Las cuentas que crea la gente se pierden.**
+directorio escribible es `/tmp`, cada instancia tiene el suyo, y se vacía en el
+próximo arranque en frío. **Se pierden las cuentas Y los pagos.**
 
-No es un bug: es que Vercel no sirve para esto. Hace falta un servicio con
-disco de verdad — Railway o Render, ambos con plan gratuito o de pocos
-dólares, montando un volumen y apuntando `MATCHER_BD` ahí:
+No es un bug ni lo arregla el plan Pro: Vercel corre funciones sin estado, por
+diseño. Con la base borrándose no hay dónde registrar un cobro de MercadoPago,
+así que esto bloquea el cobro, no sólo las cuentas.
+
+El repo ya trae todo lo que hace falta (`Dockerfile` + `railway.json`). Son
+cinco pasos:
+
+1. **railway.app** → *New Project* → *Deploy from GitHub repo* → `vieraschiavi/Matcher`.
+   Railway lee `railway.json` y usa el `Dockerfile`; no autodetecta.
+2. Servicio → **Settings → Volumes → New Volume**, punto de montaje **`/datos`**.
+   Ése es el que la imagen espera (`MATCHER_BD=/datos/matcher.db`).
+3. Servicio → **Variables**:
 
 | Variable | Valor |
 |---|---|
-| `MATCHER_BD` | `/datos/matcher.db` (la ruta del volumen montado) |
-| `MATCHER_SECRETO` | 48 caracteres al azar, o las sesiones se caen al reiniciar |
+| `MATCHER_SECRETO` | 48 caracteres al azar (sin esto las sesiones se caen en cada reinicio) |
+| `MATCHER_DEMO` | `0` |
+| `MATCHER_CUENTAS_DUENIO` | `vieraschiavi@gmail.com,arcortito@gmail.com` |
+| `MATCHER_DEMO_CLAVE` | una nueva — la vieja está quemada |
+| `RESEND_API_KEY` | opcional, para los avisos de compra |
 
-Comprobalo después de desplegar:
+4. **Settings → Networking → Generate Domain**. Copiá la URL y ponela también
+   en `MATCHER_URL_PUBLICA` (la usan el login externo y los webhooks).
+5. Comprobalo:
 
 ```bash
-curl https://tu-dominio/api/salud
-# almacenamiento_efimero tiene que decir false
+curl https://tu-url.up.railway.app/api/salud
+# almacenamiento_efimero tiene que decir FALSE
 ```
+
+**El puerto no lo configures.** Railway inyecta `PORT` y el contenedor lo lee
+(`tests/test_despliegue.py` lo fija). Ese detalle hacía fallar el healthcheck
+con el build en verde, que se ve como "la app está rota" cuando en realidad
+arrancó bien y nadie le hablaba al puerto donde escuchaba.
+
+**La web pública (`landing/`) puede seguir en Vercel**: son tres HTML estáticos
+sin backend. Lo que se muda es la app.
 
 ### 2. Los pagos están en modo demo
 

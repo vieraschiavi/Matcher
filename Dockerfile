@@ -46,4 +46,11 @@ EXPOSE 8080
 
 # Sin MATCHER_SECRETO las sesiones se caen entre reinicios: se define en el
 # panel del host, nunca en la imagen.
-CMD ["sh", "-c", "python3 -m uvicorn webapp.backend.api:app --host 0.0.0.0 --port ${MATCHER_PUERTO}"]
+#
+# EL PUERTO SE LEE DE `PORT` PRIMERO, y no es un detalle: Railway, Render y
+# Heroku asignan el puerto por su cuenta y lo pasan en esa variable. Un
+# contenedor que escucha en 8080 fijo mientras el host rutea a otro puerto pasa
+# el build, arranca, y falla el healthcheck — o sea que se ve como "la app está
+# rota" cuando en realidad nadie le está hablando al puerto donde escucha.
+# `MATCHER_PUERTO` queda de respaldo para correr esto a mano.
+CMD ["sh", "-c", "python3 -m uvicorn webapp.backend.api:app --host 0.0.0.0 --port ${PORT:-${MATCHER_PUERTO:-8080}}"]
