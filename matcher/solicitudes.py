@@ -27,19 +27,15 @@ TRES DECISIONES QUE IMPORTAN
 
 from __future__ import annotations
 
-import json
-import os
 import re
-import smtplib
-import urllib.request
 import uuid
 from datetime import datetime, timedelta
-from email.message import EmailMessage
 
+from . import aviso
 from .modelos import DatosInvalidos
 
-# A dónde va el aviso. El pedido del dueño fue explícito: que caiga en su mail.
-DESTINO_POR_DEFECTO = "vieraschiavi@gmail.com"
+# A dónde va el aviso vive en `aviso.py`, que es el que manda el mail.
+DESTINO_POR_DEFECTO = aviso.DESTINO_POR_DEFECTO
 
 # Tope de pedidos por dirección de mail en una ventana. No es anti-spam serio
 # —eso es un captcha o un WAF— pero corta el caso tonto de apretar el botón
@@ -82,24 +78,6 @@ def validar(datos: dict) -> dict:
     }
 
 
-def _smtp_configurado() -> dict | None:
-    host = os.getenv("MATCHER_SMTP_HOST", "").strip()
-    usuario = os.getenv("MATCHER_SMTP_USUARIO", "").strip()
-    clave = os.getenv("MATCHER_SMTP_CLAVE", "").strip()
-    if not (host and usuario and clave):
-        return None
-    return {
-        "host": host,
-        "puerto": int(os.getenv("MATCHER_SMTP_PUERTO", "587")),
-        "usuario": usuario,
-        "clave": clave,
-    }
-
-
-def destino() -> str:
-    return os.getenv("MATCHER_EMAIL_DEMOS", DESTINO_POR_DEFECTO).strip() or DESTINO_POR_DEFECTO
-
-
 def _asunto(datos: dict) -> str:
     return f"Demo de Matcher · {datos['nombre']} ({datos['empresa']})"
 
@@ -116,89 +94,25 @@ def _cuerpo(datos: dict) -> str:
     )
 
 
-def _avisar_resend(datos: dict) -> bool:
-    """Resend: una sola API key, sin host ni puerto. Es lo más simple de
-    configurar en Vercel y tiene plan gratis.
-
-    OJO CON EL REMITENTE. Para mandar desde `demos@tudominio.com` hay que
-    verificar el dominio en Resend (un par de registros DNS). Sin dominio
-    verificado, Resend sólo deja el remitente `onboarding@resend.dev`, y desde
-    ése **únicamente se puede escribir a la dirección de tu propia cuenta de
-    Resend**. Para este uso alcanza —el aviso va justamente a tu mail— pero si
-    algún día querés escribirle al prospecto desde acá, hace falta el dominio.
-    """
-    clave = os.getenv("RESEND_API_KEY", "").strip()
-    if not clave:
-        return False
-    remitente = os.getenv("MATCHER_EMAIL_REMITENTE", "onboarding@resend.dev").strip()
-    cuerpo = json.dumps({
-        "from": f"Matcher <{remitente}>",
-        "to": [destino()],
-        "subject": _asunto(datos),
-        "text": _cuerpo(datos),
-        # Responder va directo al prospecto, sin copiar la dirección a mano:
-        # es la diferencia entre contestar en 30 segundos o dejarlo para
-        # después y no contestar nunca.
-        "reply_to": datos["email"],
-    }).encode()
-    pedido = urllib.request.Request(
-        "https://api.resend.com/emails",
-        data=cuerpo,
-        method="POST",
-        headers={"Authorization": f"Bearer {clave}", "Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(pedido, timeout=15) as r:
-            return 200 <= r.status < 300
-    except Exception:
-        return False
-
-
-def _avisar_smtp(datos: dict) -> bool:
-    """Alternativa por SMTP, para quien ya tiene un servidor de correo y no
-    quiere sumar otro servicio."""
-    smtp = _smtp_configurado()
-    if not smtp:
-        return False
-    try:
-        m = EmailMessage()
-        m["Subject"] = _asunto(datos)
-        m["From"] = smtp["usuario"]
-        m["To"] = destino()
-        m["Reply-To"] = datos["email"]
-        m.set_content(_cuerpo(datos))
-        with smtplib.SMTP(smtp["host"], smtp["puerto"], timeout=15) as s:
-            s.starttls()
-            s.login(smtp["usuario"], smtp["clave"])
-            s.send_message(m)
-        return True
-    except Exception:
-        return False
-
-
 def _avisar(datos: dict) -> bool:
     """Manda el mail. Devuelve si salió. NUNCA levanta: el pedido ya está
     guardado y perder el aviso no puede tirar abajo la respuesta al que pidió.
 
-    Resend primero porque es el que se configura con una sola variable; SMTP
-    queda para quien ya tiene servidor propio. Si no hay ninguno de los dos, el
-    pedido igual queda en el panel — nunca se le promete al que pide un mail
-    que el sistema no puede mandar (regla 10 del producto).
+    El envío en sí vive en `matcher/aviso.py`, compartido con las alertas de
+    compra. Estaba acá adentro y se iba a copiar el día que apareció el segundo
+    aviso; dos copias del mismo envío se desincronizan a la primera — se
+    arregla un timeout en una y la otra se sigue colgando.
 
-    Los errores se tragan a propósito y sin loguear el detalle: el mensaje de
-    fallo del proveedor puede traer adentro la dirección del prospecto.
+    A diferencia de las alertas de compra, ésta va SINCRÓNICA: quien pide una
+    demo puede esperar medio segundo, y así el panel puede mostrar si el aviso
+    salió o no.
     """
-    return _avisar_resend(datos) or _avisar_smtp(datos)
+    return aviso.mandar(_asunto(datos), _cuerpo(datos), responder_a=datos["email"])
 
 
-def como_avisa() -> str:
-    """Qué vía está configurada. Lo muestra el panel para que el dueño sepa si
-    los pedidos le llegan al mail o si tiene que entrar a mirarlos."""
-    if os.getenv("RESEND_API_KEY", "").strip():
-        return "resend"
-    if _smtp_configurado():
-        return "smtp"
-    return "ninguna"
+# Se re-exportan para no romper a quien las importa desde acá.
+destino = aviso.destino
+como_avisa = aviso.como_avisa
 
 
 def crear(almacen, datos: dict, origen: str = "") -> dict:

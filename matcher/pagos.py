@@ -38,7 +38,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
-from . import planes
+from . import alertas, planes
 from .modelos import DatosInvalidos, Perfil
 
 PERIODOS = ("mensual", "anual")
@@ -594,6 +594,11 @@ def iniciar(almacen, perfil: Perfil, plan_codigo: str, periodo: str) -> Checkout
         referencia=checkout.id,
         referencia_externa=checkout.referencia_externa,
     )
+    # Aviso de INTENCIÓN de compra. Va después de registrar el pago —para que
+    # el aviso no pueda existir sin la fila— y en segundo plano, porque acá el
+    # usuario está esperando el redirect a la pasarela y una llamada HTTP más
+    # en el camino de una compra cuesta ventas. Nunca levanta: ver `alertas`.
+    alertas.intento_de_compra(almacen, perfil, checkout)
     return checkout
 
 
@@ -636,6 +641,12 @@ def confirmar(almacen, perfil: Perfil, referencia: str) -> dict:
     )
     perfil.plan_vence = planes.vencimiento(fila["periodo"], base)
     almacen.guardar_perfil(perfil)
+
+    # Acá SÍ entró plata. Va después de dar el plan de alta: si el aviso saliera
+    # antes y el alta fallara, el mail diría "cobrado" sobre algo que no quedó
+    # cobrado. Como `confirmar` es idempotente, esto se manda una sola vez por
+    # pago aunque el webhook reintente.
+    alertas.compra_confirmada(almacen, perfil, fila)
     return {
         "ya_confirmado": False,
         "plan": perfil.plan,

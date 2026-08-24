@@ -106,6 +106,59 @@ así que hay que darla por conocida.
 
 ---
 
+## 2 ter. Alerta por mail cuando alguien quiere comprar
+
+**Para qué sirve.** Si tenés varios proyectos y el hosting pago se cobra por
+equipo activado, pagarlo por adelantado en todos es apostar contra una
+hipótesis. Estas dos alertas contestan la única pregunta que decide eso:
+**¿hay alguien intentando pagar?**
+
+Llegan dos mails distintos, y no valen lo mismo:
+
+| Mail | Cuándo | Qué significa |
+|---|---|---|
+| `alguien quiere comprar…` | abrió el checkout | **Intención.** No entró plata. Buena parte de los checkouts no se terminan |
+| `COBRADO USD …` | la pasarela acreditó | **Plata.** Éste es el que importa |
+
+Los dos traen quién fue, qué plan, cuánto, y un contexto con los intentos de
+los últimos 30 días y lo facturado hasta hoy — para que el mail sirva para
+decidir algo, no sólo para avisar.
+
+### Qué configurar
+
+Nada nuevo: usa el mismo `RESEND_API_KEY` (o el SMTP) de la sección 2 bis.
+**Sin proveedor de correo configurado no manda nada y no rompe nada** — los
+intentos igual quedan en el panel.
+
+| Variable | Valor | Para qué |
+|---|---|---|
+| `MATCHER_ALERTA_INTENCION` | `0` para apagarla | Si algún día hay volumen, ésta se vuelve ruido |
+| `MATCHER_ALERTA_COBRO` | `0` para apagarla | La del dinero. Dejala prendida |
+
+Son dos variables separadas a propósito: se puede callar la de intención sin
+perder la de cobro.
+
+### Tres cosas que hace bien, y por qué importan
+
+- **Se dispara en el servidor, no en un `onClick`.** Un click del navegador se
+  pierde con un bloqueador, se repite si la persona insiste, y lo manda el
+  cliente, así que no se puede creer. La señal es el checkout creado, que ya
+  quedó escrito en la tabla `pagos` con monto y plan de verdad.
+- **No demora la compra.** El aviso sale en segundo plano: quien está
+  comprando no espera al proveedor de correo.
+- **Si el mail se cae, la compra sigue.** Hay un test que rompe el envío a
+  propósito y exige que el checkout salga igual.
+
+### Lo que esto NO resuelve
+
+No sirve para vender desde un plan de hosting que prohíbe el uso comercial.
+El sitio ya ofrece la venta desde que está publicado, haya clicks o no, y la
+alerta corre **adentro** de ese mismo backend: si el proveedor lo suspende, se
+apaga junto con la venta. Es un medidor de demanda, no una forma de esquivar
+los términos de nadie.
+
+---
+
 ## 3. MercadoPago
 
 Panel: <https://www.mercadopago.com.uy/developers/panel>
