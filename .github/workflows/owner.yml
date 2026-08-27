@@ -1,0 +1,104 @@
+# Instalador de la EDICIÓN OWNER: el programa completo, con backend adentro.
+#
+# POR QUÉ ES UN WORKFLOW APARTE Y NO UN JOB MÁS DE `paquetes.yml`
+# Este build es distinto en todo: baja un Python embebido, instala las
+# dependencias del backend con `pip --target`, y empaqueta con otro
+# `electron-builder-owner.yml`. Meterlo adentro del otro workflow obliga a leer
+# cada paso preguntándose "¿este es el de cliente o el de owner?".
+#
+# POR QUÉ EL .EXE NO SE COMMITEA AL REPOSITORIO
+# Pesa del orden de 80-90 MB (Electron + Python + el motor). GitHub admite
+# hasta 100 MB por archivo, así que ENTRARÍA — pero un binario de ese tamaño
+# por versión infla el clon para siempre y no se puede sacar del historial sin
+# reescribirlo. Por eso queda como artefacto de la corrida y, con una etiqueta,
+# como Release: la Release es una URL estable y no pesa en el `git clone`.
+#
+# `descargas-owner/LEEME.md` explica dónde bajarlo.
+
+name: Instalador OWNER
+
+on:
+  workflow_dispatch:          # el botón "Run workflow" en la pestaña Actions
+  push:
+    tags: ["owner-v*"]
+
+permissions:
+  contents: write             # hace falta para publicar la Release
+
+jobs:
+  windows:
+    name: Instalador OWNER (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Instalar dependencias de node
+        run: npm ci
+
+      # La edición owner NO lleva URL de backend compilada: la pone en tiempo
+      # de ejecución `electron/servidor-local.js`, apuntando al servidor que
+      # levanta en esta misma máquina. Si acá se compilara una URL remota, el
+      # backend local quedaría levantado sin que nadie lo use.
+      - name: Compilar la app web
+        run: npm run build:web
+
+      # Python embebido de python.org: es un .zip que se descomprime y corre,
+      # sin instalador y sin tocar el Python del sistema de quien lo instale.
+      - name: Preparar el Python embebido
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ver = "3.11.9"
+          $dest = "dist-owner/python"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Invoke-WebRequest -Uri "https://www.python.org/ftp/python/$ver/python-$ver-embed-amd64.zip" -OutFile "$env:RUNNER_TEMP\py.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\py.zip" -DestinationPath $dest -Force
+
+          # El Python embebido trae los imports de sitio APAGADOS: sin esto no
+          # encuentra nada de lo que se instale con pip, y el servidor muere con
+          # ModuleNotFoundError apenas arranca.
+          $pth = Get-ChildItem "$dest/python*._pth" | Select-Object -First 1
+          (Get-Content $pth) -replace '^#\s*import site', 'import site' | Set-Content $pth
+          Add-Content $pth "Lib\site-packages"
+
+          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "$env:RUNNER_TEMP\get-pip.py"
+          & "$dest/python.exe" "$env:RUNNER_TEMP\get-pip.py" --no-warn-script-location
+
+          # Sólo lo que el backend necesita para servir. El motor (`matcher/`)
+          # es biblioteca estándar: no suma ni una dependencia.
+          & "$dest/python.exe" -m pip install --no-warn-script-location `
+              fastapi "uvicorn[standard]" pydantic
+
+      - name: Comprobar que el Python embebido levanta el backend
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:PYTHONPATH = (Get-Location).Path
+          $env:MATCHER_BD = "$env:RUNNER_TEMP\prueba.db"
+          $env:MATCHER_DEMO = "1"
+          # Importar la app es lo que revienta si falta una dependencia o si el
+          # `._pth` quedó mal. Falla ACÁ, con un mensaje claro, en vez de fallar
+          # en la máquina del dueño después de instalar 90 MB.
+          & "dist-owner/python/python.exe" -c "from webapp.backend.api import app; print('backend importa OK')"
+
+      - name: Armar el instalador OWNER
+        run: npx electron-builder --win --config electron-builder-owner.yml --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Matcher-OWNER-windows
+          path: dist-escritorio/*.exe
+          if-no-files-found: error
+
+      - name: Publicar la Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: gh release create "${GITHUB_REF_NAME}" dist-escritorio/*.exe
+             --title "Matcher OWNER ${GITHUB_REF_NAME}"
+             --notes "Edición del dueño: trae el backend adentro y corre sin servidor. No es la versión de cliente."
+             --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -74,7 +74,20 @@ const POR_DEFECTO = "https://matcher-sable.vercel.app";
 // El escritorio necesita URL absoluta por el mismo motivo que el APK: la app
 // se sirve desde el disco, no desde el backend, así que una ruta relativa
 // apuntaría al sistema de archivos.
-export const BASE = CONFIGURADA || (NATIVO || ESCRITORIO ? POR_DEFECTO : "");
+// La edición OWNER trae su propio backend adentro y lo levanta al abrir: ahí
+// `apiLocal` apunta a `http://127.0.0.1:<puerto>` y gana sobre todo lo demás,
+// porque es el servidor de esta misma máquina.
+//
+// Va PRIMERO en la cadena a propósito. Si quedara después de `CONFIGURADA`, el
+// build de owner —que se compila con `VITE_API_URL` puesta como cualquier
+// otro— seguiría hablándole al servidor remoto y el backend local quedaría
+// levantado sin que nadie lo use: la app andaría, pero contra la base de
+// producción, que es exactamente lo que la edición owner existe para no hacer.
+const API_LOCAL =
+  (typeof window !== "undefined" && window.matcherEscritorio?.apiLocal) || "";
+
+export const BASE =
+  API_LOCAL || CONFIGURADA || (NATIVO || ESCRITORIO ? POR_DEFECTO : "");
 export const esNativo = NATIVO;
 export const esEscritorio = ESCRITORIO;
 

@@ -72,10 +72,39 @@ def test_el_backend_por_defecto_es_https(fuente):
 
 def test_se_puede_pisar_al_compilar(fuente):
     """`VITE_API_URL` tiene que seguir ganándole al valor por defecto: es cómo
-    se apunta a otro backend sin tocar el código."""
+    se apunta a otro backend sin tocar el código.
+
+    ESTE TEST SE REESCRIBIÓ, Y CONVIENE SABER POR QUÉ.
+
+    La versión anterior exigía la forma literal `BASE = CONFIGURADA ||`, y se
+    puso en rojo al aparecer la edición OWNER, que mete `API_LOCAL` adelante.
+    No había regresión: `CONFIGURADA` le sigue ganando a `POR_DEFECTO`, que es
+    lo único que este test quiere proteger. Lo que estaba mal era el test —
+    fijaba la ESCRITURA de la expresión en vez de la precedencia.
+
+    Un test así se "arregla" de la peor manera: sacándole la prioridad al
+    backend local para que la cadena vuelva a empezar con `CONFIGURADA`, y ahí
+    sí se rompe algo de verdad (el `.exe` de owner hablándole a producción). Por
+    eso ahora se comprueba el ORDEN, y de paso que nadie meta un tercer valor
+    delante del configurado sin pensarlo.
+    """
     assert "VITE_API_URL" in fuente
-    assert re.search(r"BASE\s*=\s*CONFIGURADA\s*\|\|", fuente), (
-        "el valor configurado al compilar dejó de tener prioridad"
+    m = re.search(r"export const BASE\s*=\s*([^;]+);", fuente)
+    assert m, "no se encontró la definición de BASE en api.js: ¿se renombró?"
+    cadena = [t.strip() for t in m.group(1).split("||")]
+
+    assert "CONFIGURADA" in cadena, "el valor de VITE_API_URL ya no entra en BASE"
+    assert any("POR_DEFECTO" in t for t in cadena), "desapareció el backend por defecto"
+    assert cadena.index("CONFIGURADA") < next(
+        i for i, t in enumerate(cadena) if "POR_DEFECTO" in t
+    ), "el valor configurado al compilar dejó de tener prioridad sobre el default"
+
+    # Lo único que puede ir ADELANTE del configurado es el backend local de la
+    # edición owner, y sólo porque ahí el servidor corre en esta misma máquina.
+    # Cualquier otra cosa delante se come el `VITE_API_URL` de todos los builds.
+    adelante = cadena[: cadena.index("CONFIGURADA")]
+    assert adelante in ([], ["API_LOCAL"]), (
+        f"algo se metió delante de CONFIGURADA y le gana a VITE_API_URL: {adelante}"
     )
 
 

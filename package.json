@@ -15,7 +15,9 @@
     "pc": "npm run build:web && electron .",
     "pc:windows": "npm run build:web && electron-builder --win --publish never",
     "pc:linux": "npm run build:web && electron-builder --linux --publish never",
-    "pc:mac": "npm run build:web && electron-builder --mac --publish never"
+    "pc:mac": "npm run build:web && electron-builder --mac --publish never",
+    "pc:owner": "npm run build:web && electron . --owner",
+    "pc:owner:windows": "npm run build:web && electron-builder --win --config electron-builder-owner.yml --publish never"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.2.0",

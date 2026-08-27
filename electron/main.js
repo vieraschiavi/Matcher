@@ -28,6 +28,19 @@
 
 const path = require("path");
 const { app, BrowserWindow, Menu, shell, dialog } = require("electron");
+const servidorLocal = require("./servidor-local");
+
+// EDICIÓN OWNER: el .exe trae su propio backend y lo levanta al abrir.
+//
+// Se reconoce por su CONTENIDO (`servidorLocal.esOwner()`), no por una
+// bandera: la carpeta `servidor/` sólo la deja el empaquetado con
+// `electron-builder-owner.yml`. Está explicado en `servidor-local.js`.
+//
+// Que esto exista NO le da acceso a nadie a la versión paga: el plan de un
+// cliente vive en el servidor y se decide al entrar (regla 15). Acá se levanta
+// una instancia propia, con su propia base vacía, en la máquina del dueño.
+const ES_OWNER = servidorLocal.esOwner();
+let servidor = null;
 
 const ESQUEMA = "com.matcher.app";
 const DIST = path.join(__dirname, "..", "webapp", "frontend", "dist");
@@ -114,6 +127,23 @@ function menu() {
       label: "Matcher",
       submenu: [
         { label: "Recargar", accelerator: "CmdOrCtrl+R", click: () => ventana?.reload() },
+        // Sólo en la edición owner, y con motivo: es la ÚNICA forma de decirle
+        // a esta copia cuál es la cuenta del dueño. Sin esto habría que abrir
+        // las variables de entorno de Windows, y entonces el panel —que es
+        // parte de lo que la edición owner existe para probar— no se ve nunca.
+        ...(ES_OWNER
+          ? [
+              { type: "separator" },
+              {
+                label: "Cuenta de dueño (duenio.txt)…",
+                click: () => {
+                  const datos = app.getPath("userData");
+                  servidorLocal.leerDuenio(datos); // lo crea con instrucciones si falta
+                  shell.openPath(servidorLocal.archivoDuenio(datos));
+                },
+              },
+            ]
+          : []),
         { type: "separator" },
         { label: "Salir", accelerator: "CmdOrCtrl+Q", role: "quit" },
       ],
@@ -159,7 +189,26 @@ if (!app.requestSingleInstanceLock()) {
     entregarEnlace(argv.find((a) => a.startsWith(`${ESQUEMA}://`)));
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    // El servidor local va ANTES de crear la ventana: si la ventana abriera
+    // primero, la primera pantalla mostraría un error de red que se arregla
+    // solo al recargar — el peor tipo de bug, porque quien lo ve no lo puede
+    // reportar.
+    if (ES_OWNER) {
+      const datos = app.getPath("userData");
+      servidor = await servidorLocal.levantar({
+        datos,
+        // De un archivo de texto en la carpeta de datos, no del entorno: en una
+        // PC no hay panel de plataforma donde poner variables. Ver
+        // `servidor-local.js`.
+        cuentasDuenio: servidorLocal.leerDuenio(datos),
+      });
+      // Si no arrancó, `apiLocal` queda vacío y el frontend cae al backend
+      // remoto de siempre. Peor que no tener servidor local es tener uno que
+      // no responde y una app que le habla igual.
+      if (servidor) process.env.MATCHER_API_LOCAL = servidor.url;
+    }
+
     // Registrar el esquema deja que el sistema devuelva a la app el
     // `com.matcher.app://auth/...` con el que vuelve el login de Google. En
     // desarrollo hay que decirle cuál es el ejecutable, porque si no registra
@@ -190,3 +239,11 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== "darwin") app.quit();
   });
 }
+
+// Al cerrar la app se baja el servidor local. Sin esto queda un proceso de
+// Python huérfano con el archivo de la base tomado, y el próximo arranque no
+// puede escribir — se ve como "la app dejó de guardar", que no se parece en
+// nada a la causa.
+app.on("will-quit", () => {
+  if (servidor) servidor.detener();
+});

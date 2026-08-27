@@ -1,0 +1,99 @@
+# Edición OWNER: el programa completo, con su propio backend adentro.
+#
+# QUÉ LA DIFERENCIA DE LA EDICIÓN NORMAL
+# La normal (`electron-builder.yml`) es una ventana: no trae backend y habla
+# con el servidor compartido. Es lo correcto para el producto — una app de
+# citas necesita la base de todo el mundo, no una copia local.
+#
+# Ésta trae el motor, el backend y un Python embebido, y los levanta al abrir.
+# Sirve para probar el producto ENTERO en una máquina, sin servidor arriba, sin
+# credenciales de pasarela y sin internet.
+#
+# LO QUE ESTO **NO** ES, Y CONVIENE TENERLO ESCRITO
+# No es "el .exe que desbloquea la versión paga". El plan de un cliente vive en
+# el servidor y se decide al entrar (regla 15). Acá no hay nada que
+# desbloquear: es una instancia propia, con su propia base vacía. Copiar este
+# ejecutable no le da a nadie acceso a la cuenta de nadie.
+#
+# Y por eso NO se copia el patrón de meter un token de owner adentro del
+# instalador: un token válido publicado en un repo se copia y listo — la firma
+# impide inventar licencias nuevas, no impide copiar la que está publicada.
+#
+# appId y carpeta propios: así convive con la edición normal en la misma PC sin
+# pisarla, y cada una tiene su base.
+
+appId: com.matcher.app.owner
+productName: Matcher (Owner)
+copyright: Matcher
+
+# El instalador lleva Electron + Python + el motor. Sin compresión máxima no
+# entra en los 100 MB que GitHub admite por archivo.
+compression: maximum
+
+directories:
+  output: dist-escritorio
+  buildResources: assets/marca
+
+files:
+  - electron/**/*
+  - webapp/frontend/dist/**/*
+  - assets/marca/icono.ico
+  - assets/marca/icono_1024.png
+  # Fuera node_modules ENTERO: las dependencias de este package.json son las de
+  # Capacitor (el SDK de Android con sus .dex), y viajarían adentro del
+  # instalador de Windows. Se vio en el primer empaquetado de la edición
+  # normal: 2249 archivos en el asar, casi todos de Android.
+  - "!node_modules/**/*"
+
+# EL BACKEND VIAJA ACÁ, no en `files`.
+#
+# `extraResources` deja las carpetas SIN empaquetar en el asar, que es lo que
+# hace falta: Python tiene que poder importar `matcher/` desde el disco, y
+# adentro de un archivo asar no puede. `electron/servidor-local.js` las busca
+# en `process.resourcesPath/servidor`.
+#
+# `servidor/python` lo arma el workflow (`.github/workflows/owner.yml`) con el
+# Python embebido de python.org + las tres dependencias del backend. No está
+# en el repo: son ~15 MB de binarios que no se editan nunca.
+extraResources:
+  - from: matcher
+    to: servidor/matcher
+  - from: webapp/backend
+    to: servidor/webapp/backend
+  - from: assets/personas
+    to: servidor/assets/personas
+  - from: dist-owner/python
+    to: servidor/python
+
+protocols:
+  - name: Matcher Owner
+    schemes:
+      - com.matcher.app.owner
+
+win:
+  target:
+    - nsis
+  icon: assets/marca/icono.ico
+  artifactName: Matcher-OWNER-${version}-instalador.${ext}
+
+nsis:
+  # El mismo script que la edición normal: propone un disco de datos y no C:.
+  include: assets/marca/instalador.nsh
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Matcher (Owner)
+  installerIcon: assets/marca/icono.ico
+  uninstallerIcon: assets/marca/icono.ico
+  installerLanguages:
+    - es_ES
+  language: "3082"
+  # NO borrar los datos al desinstalar, al revés que en la edición normal.
+  #
+  # En la edición normal lo único local es el token de sesión, y dejarlo en una
+  # PC compartida es dejar la cuenta abierta. Acá adentro está la BASE ENTERA:
+  # borrarla al desinstalar se lleva los perfiles y los chats de prueba, y
+  # electron-builder desinstala en silencio en cada actualización.
+  deleteAppDataOnUninstall: false

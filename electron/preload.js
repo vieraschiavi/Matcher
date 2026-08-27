@@ -14,6 +14,16 @@ const { contextBridge, ipcRenderer, shell } = require("electron");
 
 contextBridge.exposeInMainWorld("matcherEscritorio", {
   escritorio: true,
+
+  // URL del backend LOCAL, sólo en la edición OWNER (ver `electron/main.js`).
+  // En la edición normal esto viene vacío y la app habla con el servidor
+  // compartido, que es lo que tiene que pasar: una app de citas necesita la
+  // base de todo el mundo, no una copia local.
+  //
+  // Lo pone el proceso principal DESPUÉS de levantar el servidor, así que si
+  // el servidor no arrancó, esto queda vacío y la app cae al backend remoto en
+  // vez de quedarse hablándole a un puerto muerto.
+  apiLocal: process.env.MATCHER_API_LOCAL || "",
   version: process.env.MATCHER_VERSION || "",
   plataforma: process.platform,
 

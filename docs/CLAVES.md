@@ -181,6 +181,35 @@ los términos de nadie.
 
 ---
 
+## 2 quater. La edición OWNER (probar el producto entero sin servidor)
+
+Es un `.exe` aparte que **trae el backend adentro**: levanta su propio servidor
+en `127.0.0.1`, con su propia base local sembrada con los perfiles sintéticos, y
+funciona **sin internet, sin servidor desplegado y sin credenciales de
+pasarela**. Sirve para probar Matcher al 100 % en una PC.
+
+Cómo bajarlo, instalarlo y usarlo: **`descargas-owner/LEEME.md`**.
+
+**No lleva ninguna clave**, y es lo importante de esta sección:
+
+- No hay token, licencia ni clave de activación adentro del instalador. Matcher
+  vende suscripción, no licencias (sección 2), así que no hay nada que
+  desbloquear. Un token válido metido en un instalador publicado en un repo no
+  es una licencia: es una credencial filtrada — la firma impide inventar
+  licencias nuevas, no impide copiar la que está publicada.
+- La pasarela queda en `demo`, que dice en pantalla que no mueve plata. En local
+  no se cobra ni se simula un cobro.
+- La cuenta de dueño **no** sale de `MATCHER_CUENTAS_DUENIO` acá: en una PC no
+  hay panel de plataforma donde poner variables de entorno. Sale de un archivo
+  de texto, `duenio.txt`, en la carpeta de datos del usuario — se abre desde el
+  menú **Matcher → Cuenta de dueño (duenio.txt)…**. Se crea vacío, con
+  instrucciones adentro: nunca hay una cuenta privilegiada de fábrica.
+
+Lo fija `tests/test_owner.py`, que entre otras cosas falla si aparece algo con
+pinta de credencial en cualquiera de los archivos de esta edición.
+
+---
+
 ## 3. MercadoPago
 
 Panel: <https://www.mercadopago.com.uy/developers/panel>

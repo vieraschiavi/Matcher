@@ -312,6 +312,38 @@ una fracción de lo que cobra la competencia.
     alerta corre adentro de ese mismo backend — si lo suspenden, se apaga junto
     con la venta. Es un medidor de demanda.
 
+27. **La edición OWNER es una instancia propia, no una llave.** El `.exe` de
+    `electron-builder-owner.yml` trae el motor, el backend y un Python embebido,
+    y los levanta al abrir: sirve para probar el producto entero en una PC sin
+    servidor, sin internet y sin credenciales de pasarela. **No es "el `.exe`
+    que desbloquea la versión paga"** — eso no existe y no puede existir
+    (reglas 15 y 20). Por eso **no lleva ningún token adentro**, al revés que el
+    repositorio que se usó de modelo: un token válido publicado en un repo
+    público no es una licencia, es una credencial filtrada — la firma impide
+    inventar licencias nuevas, no impide copiar la que está publicada.
+    Cinco cosas de `electron/servidor-local.js` que no se tocan:
+    · **La edición se reconoce por el CONTENIDO** (`ubicaciones().empaquetado`),
+      no por una variable de entorno. La primera versión leía
+      `MATCHER_EDICION`, y electron-builder no inyecta entorno en tiempo de
+      ejecución: el `.exe` empaquetado nunca se hubiera reconocido a sí mismo y
+      habría abierto contra la base de PRODUCCIÓN, que es justo lo que esta
+      edición existe para no hacer.
+    · **Escucha sólo en `127.0.0.1`**, nunca en `0.0.0.0` — incluye el sondeo de
+      puerto libre. Un backend de escritorio en todas las interfaces le abre la
+      base al resto del wifi y no se nota desde la propia máquina.
+    · **El puerto se pide libre**, no se cablea.
+    · **La base va a `userData`**, no a `$INSTDIR`: el desinstalador de
+      electron-builder hace `RMDir /r` sobre `$INSTDIR` en cada actualización.
+      Y por eso `deleteAppDataOnUninstall: false`, al revés que la edición
+      normal (allá lo único local es el token de sesión).
+    · **Si el servidor no arranca, la app abre igual** contra el backend remoto.
+      Peor que no tener servidor local es tener uno que no responde.
+    Y en `api.js`, `API_LOCAL` va **primero** en la cadena de `BASE`: después de
+    `CONFIGURADA`, el build de owner —que se compila con `VITE_API_URL` como
+    cualquier otro— seguiría hablándole a producción con el backend local
+    levantado y sin usar, sin ningún síntoma visible. Lo fija
+    `tests/test_owner.py`.
+
 ## Convenciones
 - Español rioplatense en el dominio y en los nombres de módulo, igual que
   MV Kobra AI y MV Cliente IA.
