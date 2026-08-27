@@ -31,6 +31,28 @@ que hay que hacer si sospechás que se filtró; no es algo para tocar por gusto.
 
 ---
 
+## 1 bis. Las que casi nunca se tocan (pero existen)
+
+Estaban en el código y no en este documento, que es la peor combinación: quien
+despliega no puede saber que existen, y cuando una hace falta el síntoma no se
+parece a la causa. Van con valor por defecto, así que **no** hay que ponerlas
+salvo en el caso que se indica.
+
+| Variable | Por defecto | Cuándo se toca |
+|---|---|---|
+| `MATCHER_EFIMERO` | se deduce de `MATCHER_BD` | Poner `0` cuando la base vive en `/tmp` pero sobre un disco montado de verdad. Es lo que apaga el cartel de "los datos se borran" |
+| `MATCHER_HOST` | `127.0.0.1` | Sólo al correr `python3 -m webapp.backend.api` a mano. En Docker el `CMD` ya pone `0.0.0.0` |
+| `MATCHER_PUERTO` | `8820` | Ídem. **En Railway/Render NO se toca**: esos inyectan `PORT` y el contenedor lo lee primero |
+| `MATCHER_URL_APP` | vacío | La URL donde vive la app, para el botón de la landing. Vacío = la landing no muestra el botón, en vez de mandarte a una URL rota |
+| `MATCHER_EMAIL_REMITENTE` | `onboarding@resend.dev` | Cuando verificaste tu dominio en Resend y querés mandar desde `avisos@tudominio.com` (ver sección 2 bis) |
+| `STRIPE_API_KEY` | vacío | Sólo si algún día se activa Stripe. Hoy la pasarela no está en uso: sin esta variable, `pagos` la reporta como no configurada y no aparece |
+
+**`PORT` no está en esta tabla a propósito**: no la pone nadie a mano, la inyecta
+la plataforma. El contenedor la lee antes que `MATCHER_PUERTO`
+(`tests/test_despliegue.py`).
+
+---
+
 ## 2. Tu propia cuenta en Gold (la "licencia del dueño")
 
 **Matcher no tiene licencias.** No es un programa que se compra una vez: es una
